@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedConnectRouteImport } from './routes/_authenticated/connect'
 import { Route as AuthenticatedFeedRouteImport } from './routes/_authenticated/feed'
+import { Route as AuthenticatedMessagesRouteImport } from './routes/_authenticated/messages'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -45,6 +46,11 @@ const AuthenticatedFeedRoute = AuthenticatedFeedRouteImport.update({
   path: '/feed',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedMessagesRoute = AuthenticatedMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/connect': typeof AuthenticatedConnectRoute
   '/feed': typeof AuthenticatedFeedRoute
+  '/messages': typeof AuthenticatedMessagesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/connect': typeof AuthenticatedConnectRoute
   '/feed': typeof AuthenticatedFeedRoute
+  '/messages': typeof AuthenticatedMessagesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -68,12 +76,14 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/connect': typeof AuthenticatedConnectRoute
   '/_authenticated/feed': typeof AuthenticatedFeedRoute
+  '/_authenticated/messages': typeof AuthenticatedMessagesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/reset-password' | '/connect' | '/feed'
+  fullPaths:
+    '/' | '/auth' | '/reset-password' | '/connect' | '/feed' | '/messages'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/reset-password' | '/connect' | '/feed'
+  to: '/' | '/auth' | '/reset-password' | '/connect' | '/feed' | '/messages'
   id:
     | '__root__'
     | '/'
@@ -82,6 +92,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/connect'
     | '/_authenticated/feed'
+    | '/_authenticated/messages'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -135,17 +146,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFeedRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/messages': {
+      id: '/_authenticated/messages'
+      path: '/messages'
+      fullPath: '/messages'
+      preLoaderRoute: typeof AuthenticatedMessagesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedConnectRoute: typeof AuthenticatedConnectRoute
   AuthenticatedFeedRoute: typeof AuthenticatedFeedRoute
+  AuthenticatedMessagesRoute: typeof AuthenticatedMessagesRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedConnectRoute: AuthenticatedConnectRoute,
   AuthenticatedFeedRoute: AuthenticatedFeedRoute,
+  AuthenticatedMessagesRoute: AuthenticatedMessagesRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
