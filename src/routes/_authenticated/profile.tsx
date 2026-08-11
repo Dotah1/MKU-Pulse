@@ -110,7 +110,9 @@ function ProfilePage() {
 
   const toggleFlag = async (key: "notifications_enabled" | "is_private", value: boolean) => {
     if (!user) return;
-    const { error } = await supabase.from("profiles").update({ [key]: value }).eq("id", user.id);
+    const patch =
+      key === "is_private" ? { is_private: value } : { notifications_enabled: value };
+    const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
     if (error) toast.error(error.message);
     else await refreshProfile();
   };
