@@ -170,7 +170,7 @@ function ProfilePage() {
         </div>
         <div>
           <h1 className="font-display text-2xl font-bold">{profile?.full_name || "Your profile"}</h1>
-          <p className="text-sm text-muted-foreground">{profile?.email}</p>
+          <p className="text-sm text-muted-foreground">{user?.email}</p>
           <Badge variant="outline" className="mt-1 capitalize">
             {limits.label} plan
             {freeAccessMode ? " (free access mode)" : ""}
