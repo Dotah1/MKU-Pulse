@@ -552,7 +552,48 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      profiles_public: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string | null
+          full_name: string | null
+          id: string | null
+          interests: string[] | null
+          is_banned: boolean | null
+          is_private: boolean | null
+          major: string | null
+          tier: Database["public"]["Enums"]["sub_tier"] | null
+          year_of_study: number | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string | null
+          full_name?: string | null
+          id?: string | null
+          interests?: string[] | null
+          is_banned?: boolean | null
+          is_private?: boolean | null
+          major?: string | null
+          tier?: Database["public"]["Enums"]["sub_tier"] | null
+          year_of_study?: number | null
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string | null
+          full_name?: string | null
+          id?: string | null
+          interests?: string[] | null
+          is_banned?: boolean | null
+          is_private?: boolean | null
+          major?: string | null
+          tier?: Database["public"]["Enums"]["sub_tier"] | null
+          year_of_study?: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       effective_tier: {
