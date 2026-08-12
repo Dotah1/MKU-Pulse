@@ -5,8 +5,6 @@ export type Tier = "free" | "mid" | "full";
 export interface Profile {
   id: string;
   full_name: string;
-  email: string;
-  phone: string;
   year_of_study: number;
   major: string;
   avatar_url: string | null;

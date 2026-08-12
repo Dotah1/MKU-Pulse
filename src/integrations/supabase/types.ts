@@ -362,12 +362,32 @@ export type Database = {
         }
         Relationships: []
       }
+      profile_contacts: {
+        Row: {
+          email: string
+          id: string
+          phone: string
+          updated_at: string
+        }
+        Insert: {
+          email?: string
+          id: string
+          phone?: string
+          updated_at?: string
+        }
+        Update: {
+          email?: string
+          id?: string
+          phone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           bio: string
           created_at: string
-          email: string
           full_name: string
           id: string
           interests: string[]
@@ -376,7 +396,6 @@ export type Database = {
           major: string
           notifications_enabled: boolean
           pending_tier: Database["public"]["Enums"]["sub_tier"] | null
-          phone: string
           tier: Database["public"]["Enums"]["sub_tier"]
           tier_expires_at: string | null
           updated_at: string
@@ -386,7 +405,6 @@ export type Database = {
           avatar_url?: string | null
           bio?: string
           created_at?: string
-          email?: string
           full_name?: string
           id: string
           interests?: string[]
@@ -395,7 +413,6 @@ export type Database = {
           major?: string
           notifications_enabled?: boolean
           pending_tier?: Database["public"]["Enums"]["sub_tier"] | null
-          phone?: string
           tier?: Database["public"]["Enums"]["sub_tier"]
           tier_expires_at?: string | null
           updated_at?: string
@@ -405,7 +422,6 @@ export type Database = {
           avatar_url?: string | null
           bio?: string
           created_at?: string
-          email?: string
           full_name?: string
           id?: string
           interests?: string[]
@@ -414,7 +430,6 @@ export type Database = {
           major?: string
           notifications_enabled?: boolean
           pending_tier?: Database["public"]["Enums"]["sub_tier"] | null
-          phone?: string
           tier?: Database["public"]["Enums"]["sub_tier"]
           tier_expires_at?: string | null
           updated_at?: string
@@ -552,48 +567,7 @@ export type Database = {
       }
     }
     Views: {
-      profiles_public: {
-        Row: {
-          avatar_url: string | null
-          bio: string | null
-          created_at: string | null
-          full_name: string | null
-          id: string | null
-          interests: string[] | null
-          is_banned: boolean | null
-          is_private: boolean | null
-          major: string | null
-          tier: Database["public"]["Enums"]["sub_tier"] | null
-          year_of_study: number | null
-        }
-        Insert: {
-          avatar_url?: string | null
-          bio?: string | null
-          created_at?: string | null
-          full_name?: string | null
-          id?: string | null
-          interests?: string[] | null
-          is_banned?: boolean | null
-          is_private?: boolean | null
-          major?: string | null
-          tier?: Database["public"]["Enums"]["sub_tier"] | null
-          year_of_study?: number | null
-        }
-        Update: {
-          avatar_url?: string | null
-          bio?: string | null
-          created_at?: string | null
-          full_name?: string | null
-          id?: string | null
-          interests?: string[] | null
-          is_banned?: boolean | null
-          is_private?: boolean | null
-          major?: string | null
-          tier?: Database["public"]["Enums"]["sub_tier"] | null
-          year_of_study?: number | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       effective_tier: {

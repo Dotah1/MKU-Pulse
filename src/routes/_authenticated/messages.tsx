@@ -90,7 +90,7 @@ function MessagesPage() {
       <ChatPane
         conversation={active}
         other={people[otherId]}
-        onBack={() => void navigate({ to: "/messages", search: {} })}
+        onBack={() => void navigate({ to: "/messages", search: { c: undefined } })}
       />
     );
   }
