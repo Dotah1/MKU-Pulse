@@ -6,7 +6,6 @@ export interface Profile {
   id: string;
   full_name: string;
   year_of_study: number;
-  year_of_study: number;
   major: string;
   avatar_url: string | null;
   bio: string;
