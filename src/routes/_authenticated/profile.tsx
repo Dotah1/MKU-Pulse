@@ -54,12 +54,28 @@ function ProfilePage() {
   useEffect(() => {
     if (!profile) return;
     setFullName(profile.full_name);
-    setPhone(profile.phone);
     setMajor(profile.major);
     setYear(profile.year_of_study);
     setBio(profile.bio);
     setInterests(profile.interests ?? []);
   }, [profile?.id]);
+
+  // Contact details live in a private table only the owner (and admin) can read.
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    void supabase
+      .from("profile_contacts")
+      .select("phone")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (active && data?.phone) setPhone(data.phone);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,24 +85,30 @@ function ProfilePage() {
       return;
     }
     setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        full_name: sanitizeText(fullName, 80),
-        phone: phone.trim(),
-        major: sanitizeText(major, 80),
-        year_of_study: year,
-        bio: sanitizeText(bio, 400),
-        interests,
-      })
-      .eq("id", user.id);
+    const [{ error }, { error: cErr }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .update({
+          full_name: sanitizeText(fullName, 80),
+          major: sanitizeText(major, 80),
+          year_of_study: year,
+          bio: sanitizeText(bio, 400),
+          interests,
+        })
+        .eq("id", user.id),
+      supabase
+        .from("profile_contacts")
+        .upsert({ id: user.id, email: user.email ?? "", phone: phone.trim() }),
+    ]);
     setSaving(false);
-    if (error) toast.error(error.message);
+    const failure = error ?? cErr;
+    if (failure) toast.error(failure.message);
     else {
       toast.success("Profile updated");
       await refreshProfile();
     }
   };
+
 
   const changeAvatar = async (file: File | null) => {
     if (!file || !user) return;
