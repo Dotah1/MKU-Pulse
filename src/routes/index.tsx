@@ -36,7 +36,7 @@ function Landing() {
           Campus<span className="text-primary">Connect</span>
         </span>
         <Button asChild variant="ghost" className="min-h-11">
-          <Link to="/auth">Sign in</Link>
+          <Link to="/auth" search={{ mode: "signin" }}>Sign in</Link>
         </Button>
       </header>
 
@@ -58,7 +58,7 @@ function Landing() {
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline" className="min-h-12 px-8">
-            <Link to="/auth">I already have one</Link>
+            <Link to="/auth" search={{ mode: "signin" }}>I already have one</Link>
           </Button>
         </div>
       </section>

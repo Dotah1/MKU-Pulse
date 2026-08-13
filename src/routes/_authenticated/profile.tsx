@@ -141,7 +141,7 @@ function ProfilePage() {
 
   const handleSignOut = async () => {
     await signOut();
-    void navigate({ to: "/auth", replace: true });
+    void navigate({ to: "/auth", search: { mode: "signin" }, replace: true });
   };
 
   return (
