@@ -18,6 +18,7 @@ import { Route as AuthenticatedConnectRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedFeedRouteImport } from './routes/_authenticated/feed'
 import { Route as AuthenticatedMentorshipRouteImport } from './routes/_authenticated/mentorship'
 import { Route as AuthenticatedMessagesRouteImport } from './routes/_authenticated/messages'
+import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 
 const IndexRoute = IndexRouteImport.update({
@@ -64,6 +65,12 @@ const AuthenticatedMessagesRoute = AuthenticatedMessagesRouteImport.update({
   path: '/messages',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedNotificationsRoute =
+  AuthenticatedNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/feed': typeof AuthenticatedFeedRoute
   '/mentorship': typeof AuthenticatedMentorshipRoute
   '/messages': typeof AuthenticatedMessagesRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/profile': typeof AuthenticatedProfileRoute
 }
 export interface FileRoutesByTo {
@@ -90,6 +98,7 @@ export interface FileRoutesByTo {
   '/feed': typeof AuthenticatedFeedRoute
   '/mentorship': typeof AuthenticatedMentorshipRoute
   '/messages': typeof AuthenticatedMessagesRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/profile': typeof AuthenticatedProfileRoute
 }
 export interface FileRoutesById {
@@ -103,6 +112,7 @@ export interface FileRoutesById {
   '/_authenticated/feed': typeof AuthenticatedFeedRoute
   '/_authenticated/mentorship': typeof AuthenticatedMentorshipRoute
   '/_authenticated/messages': typeof AuthenticatedMessagesRoute
+  '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
 }
 export interface FileRouteTypes {
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/feed'
     | '/mentorship'
     | '/messages'
+    | '/notifications'
     | '/profile'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/feed'
     | '/mentorship'
     | '/messages'
+    | '/notifications'
     | '/profile'
   id:
     | '__root__'
@@ -139,6 +151,7 @@ export interface FileRouteTypes {
     | '/_authenticated/feed'
     | '/_authenticated/mentorship'
     | '/_authenticated/messages'
+    | '/_authenticated/notifications'
     | '/_authenticated/profile'
   fileRoutesById: FileRoutesById
 }
@@ -214,6 +227,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMessagesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/notifications': {
+      id: '/_authenticated/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AuthenticatedNotificationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/profile': {
       id: '/_authenticated/profile'
       path: '/profile'
@@ -230,6 +250,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedFeedRoute: typeof AuthenticatedFeedRoute
   AuthenticatedMentorshipRoute: typeof AuthenticatedMentorshipRoute
   AuthenticatedMessagesRoute: typeof AuthenticatedMessagesRoute
+  AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
 }
 
@@ -239,6 +260,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFeedRoute: AuthenticatedFeedRoute,
   AuthenticatedMentorshipRoute: AuthenticatedMentorshipRoute,
   AuthenticatedMessagesRoute: AuthenticatedMessagesRoute,
+  AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
 }
 

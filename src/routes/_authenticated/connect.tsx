@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Heart, Loader2, Star, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { notify } from "@/lib/notify";
 import { useCampus } from "@/hooks/useCampus";
 import { StoredImage, UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
@@ -124,6 +125,25 @@ function ConnectPage() {
     }
     setSwipesToday((n) => n + 1);
     if (action === "super_like") setSuperToday((n) => n + 1);
+    if (action !== "pass") {
+      // The database creates the match on a mutual like — tell them if it happened.
+      const [a, b] = user.id < current.id ? [user.id, current.id] : [current.id, user.id];
+      const { data: match } = await supabase
+        .from("matches")
+        .select("id")
+        .eq("user_a", a)
+        .eq("user_b", b)
+        .maybeSingle();
+      if (match) {
+        void notify({
+          recipientIds: current.id,
+          title: "It's a match!",
+          body: "You matched with someone on Campus Connect.",
+          url: "/connect",
+          kind: "match",
+        });
+      }
+    }
     await loadMatches();
   };
 

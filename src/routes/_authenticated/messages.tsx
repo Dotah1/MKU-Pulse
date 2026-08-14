@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { notify } from "@/lib/notify";
 import { useCampus } from "@/hooks/useCampus";
 import { UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
@@ -260,6 +261,13 @@ function ChatPane({
       .eq("id", conversation.id);
     setDraft("");
     setSending(false);
+    void notify({
+      recipientIds: otherId,
+      title: `New message from ${other?.full_name ?? "a student"}`,
+      body: text.slice(0, 120),
+      url: `/messages?c=${conversation.id}`,
+      kind: "message",
+    });
     await load();
   };
 

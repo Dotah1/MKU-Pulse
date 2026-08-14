@@ -3,6 +3,7 @@ import { Home, Heart, GraduationCap, MessageCircle, User, Shield } from "lucide-
 import type { ReactNode } from "react";
 import { useCampus } from "@/hooks/useCampus";
 import { UserAvatar } from "@/components/StoredMedia";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +66,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Badge variant="outline" className="capitalize">
               {tier}
             </Badge>
+            <NotificationBell />
             <Link to="/profile" aria-label="Your profile">
               <UserAvatar
                 path={profile?.avatar_url}
