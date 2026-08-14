@@ -20,6 +20,7 @@ import {
   type Tier,
 } from "@/lib/campus";
 import { uploadFile } from "@/lib/storage";
+import { disablePush, enablePush } from "@/lib/push";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({
@@ -135,8 +136,19 @@ function ProfilePage() {
     const patch =
       key === "is_private" ? { is_private: value } : { notifications_enabled: value };
     const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
-    if (error) toast.error(error.message);
-    else await refreshProfile();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    if (key === "notifications_enabled") {
+      if (value) {
+        const token = await enablePush();
+        if (!token) toast.error("Allow notifications in your browser or app settings to get pushes");
+      } else {
+        await disablePush();
+      }
+    }
+    await refreshProfile();
   };
 
   const handleSignOut = async () => {
