@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { notify } from "@/lib/notify";
 import { useCampus } from "@/hooks/useCampus";
 import { UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
@@ -160,6 +161,15 @@ function AdminPage() {
       if (pErr) toast.error(pErr.message);
     }
     toast.success(approve ? "Payment approved" : "Payment rejected");
+    void notify({
+      recipientIds: row.user_id,
+      title: approve ? "Payment approved" : "Payment not approved",
+      body: approve
+        ? `Your ${row.tier} plan is active for 30 days.`
+        : note || "The M-Pesa code could not be verified.",
+      url: "/profile",
+      kind: "payment",
+    });
     await load();
   };
 
@@ -187,6 +197,15 @@ function AdminPage() {
       await supabase.from("user_roles").insert({ user_id: row.user_id, role: "mentor" });
     }
     toast.success(approve ? "Mentor approved" : "Application rejected");
+    void notify({
+      recipientIds: row.user_id,
+      title: approve ? "You're now a campus mentor" : "Mentor application declined",
+      body: approve
+        ? "Students can now find you in the mentorship directory."
+        : "Feel free to apply again with more detail.",
+      url: "/mentorship",
+      kind: "mentorship",
+    });
     await load();
   };
 

@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { GraduationCap, Loader2, MessageCircle, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { notify } from "@/lib/notify";
 import { useCampus } from "@/hooks/useCampus";
 import { UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
@@ -106,7 +107,16 @@ function MentorshipPage() {
       scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
     });
     if (error) toast.error(error.message);
-    else toast.success("Session request sent to your mentor");
+    else {
+      toast.success("Session request sent to your mentor");
+      void notify({
+        recipientIds: mentorId,
+        title: "New mentorship request",
+        body: sanitizeText(topic, 120),
+        url: "/mentorship",
+        kind: "mentorship",
+      });
+    }
   };
 
   return (
