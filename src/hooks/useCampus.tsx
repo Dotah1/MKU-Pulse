@@ -8,7 +8,9 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { disablePush, enablePush } from "@/lib/push";
 import {
   ADMIN_EMAIL,
   TIER_LIMITS,
@@ -101,56 +103,24 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     void loadProfile(uid);
   }, [session?.user.id, loadProfile]);
 
-  // Register the service worker and prompt for notifications a minute after login.
+  // Firebase Cloud Messaging: request permission, store the device token and
+  // surface foreground pushes as toasts. Works in the browser and inside the
+  // WebToAPK build (which supplies the native token on window).
   useEffect(() => {
     if (typeof window === "undefined" || !session) return;
-    if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-    }
-    const t = window.setTimeout(() => {
-      if ("Notification" in window && Notification.permission === "default") {
-        void Notification.requestPermission();
-      }
-    }, 60_000);
-    return () => window.clearTimeout(t);
-  }, [session]);
-
-  // Live notifications for new messages and matches.
-  useEffect(() => {
-    const uid = session?.user.id;
-    if (!uid) return;
-
-    const notify = (title: string, body: string) => {
-      if (typeof window === "undefined") return;
-      if (!("Notification" in window) || Notification.permission !== "granted") return;
-      void navigator.serviceWorker?.ready
-        .then((reg) => reg.showNotification(title, { body, icon: "/favicon.ico" }))
-        .catch(() => {
-          new Notification(title, { body });
-        });
-    };
-
-    const channel = supabase
-      .channel(`alerts-${uid}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        (payload) => {
-          const row = payload.new as { sender_id: string; content: string };
-          if (row.sender_id !== uid) notify("New message", row.content.slice(0, 120));
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "matches" },
-        () => notify("It's a match!", "You have a new match on Campus Connect."),
-      )
-      .subscribe();
-
+    if (profile && profile.notifications_enabled === false) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void enablePush((message) => {
+        if (cancelled) return;
+        toast(message.title, { description: message.body });
+      }).catch(() => undefined);
+    }, 4_000);
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [session?.user.id]);
+  }, [session?.user.id, profile?.notifications_enabled]);
 
   const email = session?.user.email?.toLowerCase() ?? "";
   const isAdmin = email === ADMIN_EMAIL;
@@ -170,6 +140,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
         if (session?.user.id) await loadProfile(session.user.id);
       },
       signOut: async () => {
+        await disablePush();
         await supabase.auth.signOut();
       },
     }),
