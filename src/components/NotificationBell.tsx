@@ -4,6 +4,7 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { timeAgo } from "@/lib/campus";
+import type { RouteTo } from "@/lib/links";
 
 export function NotificationBell() {
   const { items, unreadCount, markRead, markAllRead } = useNotifications(15);
@@ -42,7 +43,7 @@ export function NotificationBell() {
           {items.map((n) => (
             <li key={n.id} className={n.read_at ? "" : "bg-primary/5"}>
               <Link
-                to={n.url ?? "/notifications"}
+                to={(n.url ?? "/notifications") as RouteTo}
                 onClick={() => void markRead(n.id)}
                 className="block px-3 py-3 hover:bg-secondary"
               >
