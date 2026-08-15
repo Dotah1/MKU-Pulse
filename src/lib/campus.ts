@@ -23,6 +23,7 @@ export interface Profile {
   avatar_url: string | null;
   bio: string;
   interests: string[];
+  gender: Gender | null;
   tier: Tier;
   tier_expires_at: string | null;
   pending_tier: Tier | null;
