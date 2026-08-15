@@ -12,11 +12,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AVATAR_MAX_BYTES,
+  GENDER_OPTIONS,
   INTEREST_OPTIONS,
   PHONE_RE,
   TIER_LIMITS,
+  YEAR_OPTIONS,
   daysLeft,
   sanitizeText,
+  type Gender,
   type Tier,
 } from "@/lib/campus";
 import { uploadFile } from "@/lib/storage";
