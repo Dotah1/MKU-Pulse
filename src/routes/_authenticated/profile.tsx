@@ -249,17 +249,36 @@ function ProfilePage() {
           </div>
           <div>
             <Label htmlFor="p-year">Year of study</Label>
-            <Input
-              id="p-year"
-              type="number"
-              min={1}
-              max={8}
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              className="mt-1 min-h-11"
-            />
+            <Select value={year} onValueChange={setYear}>
+              <SelectTrigger id="p-year" className="mt-1 min-h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {YEAR_OPTIONS.map((y) => (
+                  <SelectItem key={y} value={y}>
+                    Year {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="p-gender">Gender</Label>
+            <Select value={gender} onValueChange={(v) => setGender(v as Gender)}>
+              <SelectTrigger id="p-gender" className="mt-1 min-h-11">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                {GENDER_OPTIONS.map((g) => (
+                  <SelectItem key={g.value} value={g.value}>
+                    {g.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
+
         <div>
           <Label htmlFor="p-bio">Bio</Label>
           <Textarea
