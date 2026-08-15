@@ -33,7 +33,7 @@ interface MatchRow {
 }
 
 function ConnectPage() {
-  const { user, limits, tier } = useCampus();
+  const { user, profile, limits, tier } = useCampus();
   const navigate = useNavigate();
   const [deck, setDeck] = useState<MiniProfile[]>([]);
   const [loading, setLoading] = useState(true);
