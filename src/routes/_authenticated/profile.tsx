@@ -98,6 +98,10 @@ function ProfilePage() {
       toast.error("Phone must look like +254XXXXXXXXX");
       return;
     }
+    if (!gender) {
+      toast.error("Please select your gender");
+      return;
+    }
     setSaving(true);
     const [{ error }, { error: cErr }] = await Promise.all([
       supabase
@@ -105,7 +109,8 @@ function ProfilePage() {
         .update({
           full_name: sanitizeText(fullName, 80),
           major: sanitizeText(major, 80),
-          year_of_study: year,
+          year_of_study: Number(year),
+          gender,
           bio: sanitizeText(bio, 400),
           interests,
         })
@@ -130,6 +135,11 @@ function ProfilePage() {
       toast.error("Choose an image file");
       return;
     }
+    if (file.size > AVATAR_MAX_BYTES) {
+      toast.error("Profile picture must be 5MB or smaller");
+      return;
+    }
+
     try {
       const path = await uploadFile("avatars", user.id, file);
       const { error } = await supabase
