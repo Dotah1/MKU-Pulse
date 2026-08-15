@@ -2,6 +2,19 @@ export const ADMIN_EMAIL = "odhiambochrishani@gmail.com";
 
 export type Tier = "free" | "mid" | "full";
 
+export type Gender = "male" | "female";
+
+export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+];
+
+/** Profile pictures must stay under 5MB. */
+export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+/** Feed uploads must stay under 25MB. */
+export const POST_MEDIA_MAX_BYTES = 25 * 1024 * 1024;
+export const YEAR_OPTIONS = ["1", "2", "3", "4", "5", "6"];
+
 export interface Profile {
   id: string;
   full_name: string;
