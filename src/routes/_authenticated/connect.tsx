@@ -33,7 +33,7 @@ interface MatchRow {
 }
 
 function ConnectPage() {
-  const { user, limits, tier } = useCampus();
+  const { user, profile, limits, tier } = useCampus();
   const navigate = useNavigate();
   const [deck, setDeck] = useState<MiniProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,12 +52,16 @@ function ConnectPage() {
     const seen = new Set((swiped ?? []).map((s) => s.swipee_id as string));
     seen.add(user.id);
 
-    const { data } = await supabase
+    // Only show the opposite gender.
+    const wanted = profile?.gender === "male" ? "female" : profile?.gender === "female" ? "male" : null;
+
+    let query = supabase
       .from("profiles")
       .select("id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_banned, is_private")
       .eq("is_banned", false)
-      .eq("is_private", false)
-      .limit(200);
+      .eq("is_private", false);
+    if (wanted) query = query.eq("gender", wanted);
+    const { data } = await query.limit(200);
 
     const list = ((data ?? []) as (MiniProfile & { is_banned: boolean })[]).filter(
       (p) => !seen.has(p.id),
@@ -69,7 +73,8 @@ function ConnectPage() {
     ).length;
     setSuperToday(supers);
     setLoading(false);
-  }, [user?.id]);
+  }, [user?.id, profile?.gender]);
+
 
   const loadMatches = useCallback(async () => {
     if (!user) return;

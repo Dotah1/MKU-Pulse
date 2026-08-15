@@ -449,6 +449,7 @@ export type Database = {
           bio: string
           created_at: string
           full_name: string
+          gender: Database["public"]["Enums"]["user_gender"] | null
           id: string
           interests: string[]
           is_banned: boolean
@@ -466,6 +467,7 @@ export type Database = {
           bio?: string
           created_at?: string
           full_name?: string
+          gender?: Database["public"]["Enums"]["user_gender"] | null
           id: string
           interests?: string[]
           is_banned?: boolean
@@ -483,6 +485,7 @@ export type Database = {
           bio?: string
           created_at?: string
           full_name?: string
+          gender?: Database["public"]["Enums"]["user_gender"] | null
           id?: string
           interests?: string[]
           is_banned?: boolean
@@ -630,6 +633,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_expired_posts: { Args: never; Returns: number }
       effective_tier: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["sub_tier"]
@@ -653,6 +657,7 @@ export type Database = {
       request_status: "pending" | "approved" | "rejected"
       sub_tier: "free" | "mid" | "full"
       swipe_action: "like" | "pass" | "super_like"
+      user_gender: "male" | "female"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -785,6 +790,7 @@ export const Constants = {
       request_status: ["pending", "approved", "rejected"],
       sub_tier: ["free", "mid", "full"],
       swipe_action: ["like", "pass", "super_like"],
+      user_gender: ["male", "female"],
     },
   },
 } as const

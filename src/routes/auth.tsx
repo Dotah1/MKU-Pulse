@@ -14,7 +14,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { GMAIL_RE, PHONE_RE, passwordProblem, sanitizeText } from "@/lib/campus";
+import {
+  AVATAR_MAX_BYTES,
+  GENDER_OPTIONS,
+  GMAIL_RE,
+  PHONE_RE,
+  YEAR_OPTIONS,
+  passwordProblem,
+  sanitizeText,
+  type Gender,
+} from "@/lib/campus";
 import { uploadFile } from "@/lib/storage";
 
 export const Route = createFileRoute("/auth")({
@@ -172,6 +181,7 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("+254");
   const [year, setYear] = useState("1");
+  const [gender, setGender] = useState<Gender | "">("");
   const [major, setMajor] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -184,18 +194,38 @@ function SignupForm() {
     : null;
   const pwError = password ? passwordProblem(password) : null;
 
+  const pickPhoto = (file: File | null) => {
+    if (!file) {
+      setPhoto(null);
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      toast.error("Profile picture must be an image");
+      return;
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      toast.error("Profile picture must be 5MB or smaller");
+      return;
+    }
+    setPhoto(file);
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (emailError || phoneError || pwError) {
       toast.error("Please fix the highlighted fields");
       return;
     }
+    if (!gender) {
+      toast.error("Please select your gender");
+      return;
+    }
     if (!photo) {
       toast.error("A profile picture is required to finish signing up");
       return;
     }
-    if (!photo.type.startsWith("image/")) {
-      toast.error("Profile picture must be an image");
+    if (photo.size > AVATAR_MAX_BYTES) {
+      toast.error("Profile picture must be 5MB or smaller");
       return;
     }
     setBusy(true);
@@ -210,6 +240,7 @@ function SignupForm() {
           phone: phone.trim(),
           year_of_study: Number(year),
           major: sanitizeText(major, 80),
+          gender,
         },
       },
     });
@@ -220,7 +251,17 @@ function SignupForm() {
       return;
     }
 
-    if (!data.session) {
+    // Storage writes need a session — sign in straight away when sign-up didn't return one.
+    let userId = data.session?.user.id ?? null;
+    if (!userId) {
+      const { data: signedIn } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+      userId = signedIn.session?.user.id ?? null;
+    }
+
+    if (!userId) {
       setBusy(false);
       toast.success("Check your Gmail to confirm your account, then sign in to add your photo.");
       void navigate({ to: "/auth", search: { mode: "signin" } });
@@ -228,15 +269,23 @@ function SignupForm() {
     }
 
     try {
-      const path = await uploadFile("avatars", data.session.user.id, photo);
-      await supabase.from("profiles").update({ avatar_url: path }).eq("id", data.session.user.id);
+      const path = await uploadFile("avatars", userId, photo);
+      const { error: pErr } = await supabase
+        .from("profiles")
+        .update({ avatar_url: path, gender })
+        .eq("id", userId);
+      if (pErr) throw pErr;
     } catch {
+      setBusy(false);
       toast.error("Account created, but the photo upload failed. Add it from your profile.");
+      void navigate({ to: "/profile" });
+      return;
     }
     setBusy(false);
     toast.success("Welcome to Campus Connect!");
     void navigate({ to: "/feed" });
   };
+
 
   return (
     <form onSubmit={submit} className="space-y-4">
@@ -304,7 +353,7 @@ function SignupForm() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {["1", "2", "3", "4"].map((y) => (
+              {YEAR_OPTIONS.map((y) => (
                 <SelectItem key={y} value={y}>
                   Year {y}
                 </SelectItem>
@@ -313,18 +362,33 @@ function SignupForm() {
           </Select>
         </div>
         <div>
-          <Label htmlFor="su-major">Major / department</Label>
-          <Input
-            id="su-major"
-            required
-            value={major}
-            onChange={(e) => setMajor(e.target.value)}
-            className="mt-1 min-h-11"
-          />
+          <Label htmlFor="su-gender">Gender</Label>
+          <Select value={gender} onValueChange={(v) => setGender(v as Gender)}>
+            <SelectTrigger id="su-gender" className="mt-1 min-h-11">
+              <SelectValue placeholder="Select" />
+            </SelectTrigger>
+            <SelectContent>
+              {GENDER_OPTIONS.map((g) => (
+                <SelectItem key={g.value} value={g.value}>
+                  {g.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <div>
-        <Label htmlFor="su-photo">Profile picture (required)</Label>
+        <Label htmlFor="su-major">Major / department</Label>
+        <Input
+          id="su-major"
+          required
+          value={major}
+          onChange={(e) => setMajor(e.target.value)}
+          className="mt-1 min-h-11"
+        />
+      </div>
+      <div>
+        <Label htmlFor="su-photo">Profile picture (required, max 5MB)</Label>
         <label
           htmlFor="su-photo"
           className="mt-1 flex min-h-12 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
@@ -338,9 +402,10 @@ function SignupForm() {
           accept="image/*"
           required
           className="sr-only"
-          onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+          onChange={(e) => pickPhoto(e.target.files?.[0] ?? null)}
         />
       </div>
+
       <Button type="submit" disabled={busy} className="min-h-12 w-full">
         {busy && <Loader2 className="mr-2 size-4 animate-spin" />}
         Create account

@@ -12,11 +12,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AVATAR_MAX_BYTES,
+  GENDER_OPTIONS,
   INTEREST_OPTIONS,
   PHONE_RE,
   TIER_LIMITS,
+  YEAR_OPTIONS,
   daysLeft,
   sanitizeText,
+  type Gender,
   type Tier,
 } from "@/lib/campus";
 import { uploadFile } from "@/lib/storage";
@@ -47,7 +58,8 @@ function ProfilePage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [major, setMajor] = useState("");
-  const [year, setYear] = useState(1);
+  const [year, setYear] = useState("1");
+  const [gender, setGender] = useState<Gender | "">("");
   const [bio, setBio] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -56,7 +68,8 @@ function ProfilePage() {
     if (!profile) return;
     setFullName(profile.full_name);
     setMajor(profile.major);
-    setYear(profile.year_of_study);
+    setYear(String(profile.year_of_study ?? 1));
+    setGender(profile.gender ?? "");
     setBio(profile.bio);
     setInterests(profile.interests ?? []);
   }, [profile?.id]);
@@ -85,6 +98,10 @@ function ProfilePage() {
       toast.error("Phone must look like +254XXXXXXXXX");
       return;
     }
+    if (!gender) {
+      toast.error("Please select your gender");
+      return;
+    }
     setSaving(true);
     const [{ error }, { error: cErr }] = await Promise.all([
       supabase
@@ -92,7 +109,8 @@ function ProfilePage() {
         .update({
           full_name: sanitizeText(fullName, 80),
           major: sanitizeText(major, 80),
-          year_of_study: year,
+          year_of_study: Number(year),
+          gender,
           bio: sanitizeText(bio, 400),
           interests,
         })
@@ -117,6 +135,11 @@ function ProfilePage() {
       toast.error("Choose an image file");
       return;
     }
+    if (file.size > AVATAR_MAX_BYTES) {
+      toast.error("Profile picture must be 5MB or smaller");
+      return;
+    }
+
     try {
       const path = await uploadFile("avatars", user.id, file);
       const { error } = await supabase
@@ -226,17 +249,36 @@ function ProfilePage() {
           </div>
           <div>
             <Label htmlFor="p-year">Year of study</Label>
-            <Input
-              id="p-year"
-              type="number"
-              min={1}
-              max={8}
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              className="mt-1 min-h-11"
-            />
+            <Select value={year} onValueChange={setYear}>
+              <SelectTrigger id="p-year" className="mt-1 min-h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {YEAR_OPTIONS.map((y) => (
+                  <SelectItem key={y} value={y}>
+                    Year {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="p-gender">Gender</Label>
+            <Select value={gender} onValueChange={(v) => setGender(v as Gender)}>
+              <SelectTrigger id="p-gender" className="mt-1 min-h-11">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                {GENDER_OPTIONS.map((g) => (
+                  <SelectItem key={g.value} value={g.value}>
+                    {g.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
+
         <div>
           <Label htmlFor="p-bio">Bio</Label>
           <Textarea
