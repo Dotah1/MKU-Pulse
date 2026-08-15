@@ -14,7 +14,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { GMAIL_RE, PHONE_RE, passwordProblem, sanitizeText } from "@/lib/campus";
+import {
+  AVATAR_MAX_BYTES,
+  GENDER_OPTIONS,
+  GMAIL_RE,
+  PHONE_RE,
+  YEAR_OPTIONS,
+  passwordProblem,
+  sanitizeText,
+  type Gender,
+} from "@/lib/campus";
 import { uploadFile } from "@/lib/storage";
 
 export const Route = createFileRoute("/auth")({
