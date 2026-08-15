@@ -172,6 +172,7 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("+254");
   const [year, setYear] = useState("1");
+  const [gender, setGender] = useState<Gender | "">("");
   const [major, setMajor] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -184,18 +185,38 @@ function SignupForm() {
     : null;
   const pwError = password ? passwordProblem(password) : null;
 
+  const pickPhoto = (file: File | null) => {
+    if (!file) {
+      setPhoto(null);
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      toast.error("Profile picture must be an image");
+      return;
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      toast.error("Profile picture must be 5MB or smaller");
+      return;
+    }
+    setPhoto(file);
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (emailError || phoneError || pwError) {
       toast.error("Please fix the highlighted fields");
       return;
     }
+    if (!gender) {
+      toast.error("Please select your gender");
+      return;
+    }
     if (!photo) {
       toast.error("A profile picture is required to finish signing up");
       return;
     }
-    if (!photo.type.startsWith("image/")) {
-      toast.error("Profile picture must be an image");
+    if (photo.size > AVATAR_MAX_BYTES) {
+      toast.error("Profile picture must be 5MB or smaller");
       return;
     }
     setBusy(true);
@@ -210,6 +231,7 @@ function SignupForm() {
           phone: phone.trim(),
           year_of_study: Number(year),
           major: sanitizeText(major, 80),
+          gender,
         },
       },
     });
@@ -220,7 +242,17 @@ function SignupForm() {
       return;
     }
 
-    if (!data.session) {
+    // Storage writes need a session — sign in straight away when sign-up didn't return one.
+    let userId = data.session?.user.id ?? null;
+    if (!userId) {
+      const { data: signedIn } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+      userId = signedIn.session?.user.id ?? null;
+    }
+
+    if (!userId) {
       setBusy(false);
       toast.success("Check your Gmail to confirm your account, then sign in to add your photo.");
       void navigate({ to: "/auth", search: { mode: "signin" } });
@@ -228,15 +260,23 @@ function SignupForm() {
     }
 
     try {
-      const path = await uploadFile("avatars", data.session.user.id, photo);
-      await supabase.from("profiles").update({ avatar_url: path }).eq("id", data.session.user.id);
+      const path = await uploadFile("avatars", userId, photo);
+      const { error: pErr } = await supabase
+        .from("profiles")
+        .update({ avatar_url: path, gender })
+        .eq("id", userId);
+      if (pErr) throw pErr;
     } catch {
+      setBusy(false);
       toast.error("Account created, but the photo upload failed. Add it from your profile.");
+      void navigate({ to: "/profile" });
+      return;
     }
     setBusy(false);
     toast.success("Welcome to Campus Connect!");
     void navigate({ to: "/feed" });
   };
+
 
   return (
     <form onSubmit={submit} className="space-y-4">
