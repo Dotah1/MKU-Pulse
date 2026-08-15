@@ -58,7 +58,8 @@ function ProfilePage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [major, setMajor] = useState("");
-  const [year, setYear] = useState(1);
+  const [year, setYear] = useState("1");
+  const [gender, setGender] = useState<Gender | "">("");
   const [bio, setBio] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -67,7 +68,8 @@ function ProfilePage() {
     if (!profile) return;
     setFullName(profile.full_name);
     setMajor(profile.major);
-    setYear(profile.year_of_study);
+    setYear(String(profile.year_of_study ?? 1));
+    setGender(profile.gender ?? "");
     setBio(profile.bio);
     setInterests(profile.interests ?? []);
   }, [profile?.id]);
