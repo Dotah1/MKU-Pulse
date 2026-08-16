@@ -82,11 +82,23 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase
       .from("app_settings")
       .select("key, value")
-      .eq("key", "free_access_mode")
-      .maybeSingle();
-    const value = (data?.value ?? null) as { enabled?: boolean } | null;
-    setFreeAccessMode(Boolean(value?.enabled));
+      .in("key", ["free_access_mode", "payment_info"]);
+    for (const row of data ?? []) {
+      if (row.key === "free_access_mode") {
+        const v = (row.value ?? null) as { enabled?: boolean } | null;
+        setFreeAccessMode(Boolean(v?.enabled));
+      }
+      if (row.key === "payment_info") {
+        const v = (row.value ?? {}) as Partial<PaymentInfo>;
+        setPaymentInfo({
+          number: v.number || DEFAULT_PAYMENT_INFO.number,
+          mid_price: Number(v.mid_price ?? DEFAULT_PAYMENT_INFO.mid_price),
+          full_price: Number(v.full_price ?? DEFAULT_PAYMENT_INFO.full_price),
+        });
+      }
+    }
   }, []);
+
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
