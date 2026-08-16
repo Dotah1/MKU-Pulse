@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { GraduationCap, Loader2, MessageCircle, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -154,15 +154,19 @@ function MentorshipPage() {
             return (
               <article key={m.user_id} className="rounded-2xl border border-border bg-card p-4">
                 <div className="flex items-center gap-3">
-                  <UserAvatar
-                    path={p?.avatar_url}
-                    name={p?.full_name ?? "Mentor"}
-                    className="size-12"
-                  />
+                  <Link to="/u/$id" params={{ id: m.user_id }} aria-label="View mentor profile">
+                    <UserAvatar
+                      path={p?.avatar_url}
+                      name={p?.full_name ?? "Mentor"}
+                      className="size-12"
+                    />
+                  </Link>
                   <div className="min-w-0">
-                    <h2 className="truncate font-display text-base font-semibold">
-                      {p?.full_name ?? "Mentor"}
-                    </h2>
+                    <Link to="/u/$id" params={{ id: m.user_id }}>
+                      <h2 className="truncate font-display text-base font-semibold hover:underline">
+                        {p?.full_name ?? "Mentor"}
+                      </h2>
+                    </Link>
                     <p className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Star className="size-3 fill-accent text-accent" aria-hidden="true" />
                       {m.rating.toFixed(1)} ({m.rating_count})
@@ -175,17 +179,25 @@ function MentorshipPage() {
                   {m.availability || "Flexible"}
                 </Badge>
                 <div className="mt-4 flex gap-2">
-                  <Button className="min-h-11 flex-1" onClick={() => void message(m.user_id)}>
-                    <MessageCircle className="mr-2 size-4" aria-hidden="true" />
-                    Message
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="min-h-11 flex-1"
-                    onClick={() => void requestSession(m.user_id)}
-                  >
-                    Request session
-                  </Button>
+                  {m.user_id !== user?.id && (
+                    <Button className="min-h-11 flex-1" onClick={() => void message(m.user_id)}>
+                      <MessageCircle className="mr-2 size-4" aria-hidden="true" />
+                      Message
+                    </Button>
+                  )}
+                  {m.user_id === user?.id ? (
+                    <Button variant="outline" className="min-h-11 flex-1" disabled>
+                      This is your mentor profile
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="min-h-11 flex-1"
+                      onClick={() => void requestSession(m.user_id)}
+                    >
+                      Request session
+                    </Button>
+                  )}
                 </div>
               </article>
             );
