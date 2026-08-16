@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Heart, Loader2, Star, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -188,19 +188,29 @@ function ConnectPage() {
             </p>
           ) : (
             <div className="w-full max-w-sm overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
-              {current.avatar_url ? (
-                <StoredImage
-                  path={current.avatar_url}
-                  alt={current.full_name}
-                  className="h-96 w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-96 items-center justify-center bg-secondary">
-                  <UserAvatar path={null} name={current.full_name} className="size-24" />
-                </div>
-              )}
+              <Link
+                to="/u/$id"
+                params={{ id: current.id }}
+                aria-label={`View ${current.full_name}'s profile`}
+              >
+                {current.avatar_url ? (
+                  <StoredImage
+                    path={current.avatar_url}
+                    alt={current.full_name}
+                    className="h-96 w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-96 items-center justify-center bg-secondary">
+                    <UserAvatar path={null} name={current.full_name} className="size-24" />
+                  </div>
+                )}
+              </Link>
               <div className="p-4">
-                <h2 className="font-display text-lg font-bold">{current.full_name}</h2>
+                <Link to="/u/$id" params={{ id: current.id }}>
+                  <h2 className="font-display text-lg font-bold hover:underline">
+                    {current.full_name}
+                  </h2>
+                </Link>
                 <p className="text-sm text-muted-foreground">
                   Year {current.year_of_study} · {current.major || "Student"}
                 </p>
@@ -258,23 +268,32 @@ function ConnectPage() {
               const otherId = m.user_a === user?.id ? m.user_b : m.user_a;
               const p = matchProfiles[otherId];
               return (
-                <button
+                <div
                   key={m.id}
-                  onClick={() => void openChat(otherId)}
-                  className="rounded-2xl border border-border bg-card p-3 text-left transition-colors hover:bg-secondary"
+                  className="rounded-2xl border border-border bg-card p-3 text-left"
                 >
-                  <UserAvatar
-                    path={p?.avatar_url}
-                    name={p?.full_name ?? "Student"}
-                    className="size-14"
-                  />
-                  <p className="mt-2 truncate text-sm font-semibold">
-                    {p?.full_name ?? "Student"}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {p?.major || "Student"}
-                  </p>
-                </button>
+                  <Link to="/u/$id" params={{ id: otherId }} className="block">
+                    <UserAvatar
+                      path={p?.avatar_url}
+                      name={p?.full_name ?? "Student"}
+                      className="size-14"
+                    />
+                    <p className="mt-2 truncate text-sm font-semibold hover:underline">
+                      {p?.full_name ?? "Student"}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {p?.major || "Student"}
+                    </p>
+                  </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 min-h-11 w-full"
+                    onClick={() => void openChat(otherId)}
+                  >
+                    Message
+                  </Button>
+                </div>
               );
             })}
           </div>
