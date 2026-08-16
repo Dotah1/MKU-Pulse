@@ -159,9 +159,13 @@ export function PostCard({
       className={`rounded-2xl border bg-card p-4 ${post.is_announcement ? "border-accent/50 bg-accent/5" : "border-border"}`}
     >
       <div className="flex items-center gap-3">
-        <UserAvatar path={author?.avatar_url} name={name} className="size-10" />
+        <Link to="/u/$id" params={{ id: post.user_id }} aria-label={`View ${name}'s profile`}>
+          <UserAvatar path={author?.avatar_url} name={name} className="size-10" />
+        </Link>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{name}</p>
+          <Link to="/u/$id" params={{ id: post.user_id }} className="block">
+            <p className="truncate text-sm font-semibold hover:underline">{name}</p>
+          </Link>
           <p className="text-xs text-muted-foreground">
             {author ? `Year ${author.year_of_study} · ${author.major || "Student"} · ` : ""}
             {timeAgo(post.created_at)}
@@ -173,6 +177,7 @@ export function PostCard({
           </Badge>
         )}
       </div>
+
 
       {post.content && <p className="mt-3 whitespace-pre-wrap text-sm">{post.content}</p>}
       {post.image_url && (
