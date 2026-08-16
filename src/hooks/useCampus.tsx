@@ -21,6 +21,18 @@ import {
   type TierLimits,
 } from "@/lib/campus";
 
+export interface PaymentInfo {
+  number: string;
+  mid_price: number;
+  full_price: number;
+}
+
+export const DEFAULT_PAYMENT_INFO: PaymentInfo = {
+  number: "0713249119",
+  mid_price: 150,
+  full_price: 300,
+};
+
 interface CampusState {
   loading: boolean;
   session: Session | null;
@@ -28,9 +40,13 @@ interface CampusState {
   profile: Profile | null;
   isAdmin: boolean;
   freeAccessMode: boolean;
+  paymentInfo: PaymentInfo;
   tier: Tier;
   limits: TierLimits;
   refreshProfile: () => Promise<void>;
+  refreshSettings: () => Promise<void>;
+  setFreeAccessModeLocal: (enabled: boolean) => void;
+  setPaymentInfoLocal: (info: PaymentInfo) => void;
   signOut: () => Promise<void>;
 }
 
@@ -41,6 +57,8 @@ export function CampusProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [freeAccessMode, setFreeAccessMode] = useState(false);
+  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo>(DEFAULT_PAYMENT_INFO);
+
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data } = await supabase
