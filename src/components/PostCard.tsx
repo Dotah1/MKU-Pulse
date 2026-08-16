@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Heart, MessageCircle, MessageSquare, Send, Trash2, Flag, Megaphone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
