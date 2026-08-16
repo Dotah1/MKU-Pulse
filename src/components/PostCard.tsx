@@ -237,18 +237,28 @@ export function PostCard({
         <div className="mt-3 space-y-3 border-t border-border pt-3">
           {comments.map((c) => (
             <div key={c.id} className="flex gap-2">
-              <UserAvatar
-                path={commentAuthors[c.user_id]?.avatar_url}
-                name={commentAuthors[c.user_id]?.full_name ?? "Student"}
-                className="size-8"
-              />
+              <Link
+                to="/u/$id"
+                params={{ id: c.user_id }}
+                aria-label="View profile"
+                className="shrink-0"
+              >
+                <UserAvatar
+                  path={commentAuthors[c.user_id]?.avatar_url}
+                  name={commentAuthors[c.user_id]?.full_name ?? "Student"}
+                  className="size-8"
+                />
+              </Link>
               <div className="rounded-xl bg-secondary px-3 py-2">
-                <p className="text-xs font-semibold">
-                  {commentAuthors[c.user_id]?.full_name ?? "Student"}
-                </p>
+                <Link to="/u/$id" params={{ id: c.user_id }}>
+                  <p className="text-xs font-semibold hover:underline">
+                    {commentAuthors[c.user_id]?.full_name ?? "Student"}
+                  </p>
+                </Link>
                 <p className="text-sm">{c.content}</p>
               </div>
             </div>
+
           ))}
           {comments.length === 0 && (
             <p className="text-sm text-muted-foreground">No comments yet.</p>
