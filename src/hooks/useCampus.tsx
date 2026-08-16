@@ -21,6 +21,18 @@ import {
   type TierLimits,
 } from "@/lib/campus";
 
+export interface PaymentInfo {
+  number: string;
+  mid_price: number;
+  full_price: number;
+}
+
+export const DEFAULT_PAYMENT_INFO: PaymentInfo = {
+  number: "0713249119",
+  mid_price: 150,
+  full_price: 300,
+};
+
 interface CampusState {
   loading: boolean;
   session: Session | null;
@@ -28,9 +40,13 @@ interface CampusState {
   profile: Profile | null;
   isAdmin: boolean;
   freeAccessMode: boolean;
+  paymentInfo: PaymentInfo;
   tier: Tier;
   limits: TierLimits;
   refreshProfile: () => Promise<void>;
+  refreshSettings: () => Promise<void>;
+  setFreeAccessModeLocal: (enabled: boolean) => void;
+  setPaymentInfoLocal: (info: PaymentInfo) => void;
   signOut: () => Promise<void>;
 }
 
@@ -41,6 +57,8 @@ export function CampusProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [freeAccessMode, setFreeAccessMode] = useState(false);
+  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo>(DEFAULT_PAYMENT_INFO);
+
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data } = await supabase
@@ -64,11 +82,23 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase
       .from("app_settings")
       .select("key, value")
-      .eq("key", "free_access_mode")
-      .maybeSingle();
-    const value = (data?.value ?? null) as { enabled?: boolean } | null;
-    setFreeAccessMode(Boolean(value?.enabled));
+      .in("key", ["free_access_mode", "payment_info"]);
+    for (const row of data ?? []) {
+      if (row.key === "free_access_mode") {
+        const v = (row.value ?? null) as { enabled?: boolean } | null;
+        setFreeAccessMode(Boolean(v?.enabled));
+      }
+      if (row.key === "payment_info") {
+        const v = (row.value ?? {}) as Partial<PaymentInfo>;
+        setPaymentInfo({
+          number: v.number || DEFAULT_PAYMENT_INFO.number,
+          mid_price: Number(v.mid_price ?? DEFAULT_PAYMENT_INFO.mid_price),
+          full_price: Number(v.full_price ?? DEFAULT_PAYMENT_INFO.full_price),
+        });
+      }
+    }
   }, []);
+
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
