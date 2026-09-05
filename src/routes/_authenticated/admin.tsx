@@ -8,6 +8,8 @@ import { useCampus } from "@/hooks/useCampus";
 import { UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -61,7 +63,29 @@ interface ReportRow {
 }
 
 function AdminPage() {
-  const { isAdmin, user, freeAccessMode } = useCampus();
+  const {
+    isAdmin,
+    user,
+    freeAccessMode,
+    paymentInfo,
+    setFreeAccessModeLocal,
+    setPaymentInfoLocal,
+    refreshSettings,
+  } = useCampus();
+  const [priceForm, setPriceForm] = useState({
+    number: paymentInfo.number,
+    mid_price: String(paymentInfo.mid_price),
+    full_price: String(paymentInfo.full_price),
+  });
+  const [savingPrices, setSavingPrices] = useState(false);
+
+  useEffect(() => {
+    setPriceForm({
+      number: paymentInfo.number,
+      mid_price: String(paymentInfo.mid_price),
+      full_price: String(paymentInfo.full_price),
+    });
+  }, [paymentInfo]);
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [apps, setApps] = useState<MentorAppRow[]>([]);
@@ -130,11 +154,43 @@ function AdminPage() {
   }
 
   const setFreeAccess = async (enabled: boolean) => {
+    setFreeAccessModeLocal(enabled);
     const { error } = await supabase
       .from("app_settings")
       .upsert({ key: "free_access_mode", value: { enabled }, updated_at: new Date().toISOString() });
-    if (error) toast.error(error.message);
-    else toast.success(enabled ? "Free Access Mode on" : "Free Access Mode off");
+    if (error) {
+      setFreeAccessModeLocal(!enabled);
+      toast.error(error.message);
+      return;
+    }
+    toast.success(enabled ? "Free Access Mode on" : "Free Access Mode off");
+    await refreshSettings();
+  };
+
+  const savePrices = async () => {
+    const mid = Number(priceForm.mid_price);
+    const full = Number(priceForm.full_price);
+    const number = priceForm.number.replace(/[^\d+]/g, "");
+    if (!Number.isFinite(mid) || mid < 0 || !Number.isFinite(full) || full < 0) {
+      toast.error("Enter valid prices");
+      return;
+    }
+    if (number.length < 9) {
+      toast.error("Enter a valid M-Pesa number");
+      return;
+    }
+    setSavingPrices(true);
+    const value = { number, mid_price: Math.round(mid), full_price: Math.round(full) };
+    const { error } = await supabase
+      .from("app_settings")
+      .upsert({ key: "payment_info", value, updated_at: new Date().toISOString() });
+    setSavingPrices(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setPaymentInfoLocal(value);
+    toast.success("Payment details updated for all students");
   };
 
   const decidePayment = async (row: PaymentRow, approve: boolean, note?: string) => {
@@ -267,6 +323,48 @@ function AdminPage() {
           onCheckedChange={(v) => void setFreeAccess(v)}
           aria-label="Free Access Mode"
         />
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <h2 className="font-display text-base font-semibold">Subscription pricing</h2>
+        <p className="text-sm text-muted-foreground">
+          These prices and the M-Pesa number are what every student sees.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div>
+            <Label htmlFor="mid-price">Mid plan (KES)</Label>
+            <Input
+              id="mid-price"
+              inputMode="numeric"
+              value={priceForm.mid_price}
+              onChange={(e) => setPriceForm((f) => ({ ...f, mid_price: e.target.value }))}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="full-price">Full plan (KES)</Label>
+            <Input
+              id="full-price"
+              inputMode="numeric"
+              value={priceForm.full_price}
+              onChange={(e) => setPriceForm((f) => ({ ...f, full_price: e.target.value }))}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="pay-number">M-Pesa number</Label>
+            <Input
+              id="pay-number"
+              inputMode="tel"
+              value={priceForm.number}
+              onChange={(e) => setPriceForm((f) => ({ ...f, number: e.target.value }))}
+              className="mt-1"
+            />
+          </div>
+        </div>
+        <Button className="mt-3 min-h-11" disabled={savingPrices} onClick={() => void savePrices()}>
+          {savingPrices ? "Saving…" : "Save pricing"}
+        </Button>
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-5">
