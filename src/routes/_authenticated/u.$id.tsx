@@ -129,10 +129,12 @@ function PublicProfilePage() {
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
           {profile.avatar_url ? (
             <StoredImage
+              bucket="avatars"
               path={profile.avatar_url}
               alt={profile.full_name}
               className="size-28 rounded-full object-cover"
             />
+
           ) : (
             <UserAvatar path={null} name={profile.full_name} className="size-28" />
           )}
