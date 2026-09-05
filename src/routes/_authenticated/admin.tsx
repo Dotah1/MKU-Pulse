@@ -152,11 +152,43 @@ function AdminPage() {
   }
 
   const setFreeAccess = async (enabled: boolean) => {
+    setFreeAccessModeLocal(enabled);
     const { error } = await supabase
       .from("app_settings")
       .upsert({ key: "free_access_mode", value: { enabled }, updated_at: new Date().toISOString() });
-    if (error) toast.error(error.message);
-    else toast.success(enabled ? "Free Access Mode on" : "Free Access Mode off");
+    if (error) {
+      setFreeAccessModeLocal(!enabled);
+      toast.error(error.message);
+      return;
+    }
+    toast.success(enabled ? "Free Access Mode on" : "Free Access Mode off");
+    await refreshSettings();
+  };
+
+  const savePrices = async () => {
+    const mid = Number(priceForm.mid_price);
+    const full = Number(priceForm.full_price);
+    const number = priceForm.number.replace(/[^\d+]/g, "");
+    if (!Number.isFinite(mid) || mid < 0 || !Number.isFinite(full) || full < 0) {
+      toast.error("Enter valid prices");
+      return;
+    }
+    if (number.length < 9) {
+      toast.error("Enter a valid M-Pesa number");
+      return;
+    }
+    setSavingPrices(true);
+    const value = { number, mid_price: Math.round(mid), full_price: Math.round(full) };
+    const { error } = await supabase
+      .from("app_settings")
+      .upsert({ key: "payment_info", value, updated_at: new Date().toISOString() });
+    setSavingPrices(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setPaymentInfoLocal(value);
+    toast.success("Payment details updated for all students");
   };
 
   const decidePayment = async (row: PaymentRow, approve: boolean, note?: string) => {
