@@ -324,6 +324,48 @@ function AdminPage() {
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-5">
+        <h2 className="font-display text-base font-semibold">Subscription pricing</h2>
+        <p className="text-sm text-muted-foreground">
+          These prices and the M-Pesa number are what every student sees.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div>
+            <Label htmlFor="mid-price">Mid plan (KES)</Label>
+            <Input
+              id="mid-price"
+              inputMode="numeric"
+              value={priceForm.mid_price}
+              onChange={(e) => setPriceForm((f) => ({ ...f, mid_price: e.target.value }))}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="full-price">Full plan (KES)</Label>
+            <Input
+              id="full-price"
+              inputMode="numeric"
+              value={priceForm.full_price}
+              onChange={(e) => setPriceForm((f) => ({ ...f, full_price: e.target.value }))}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="pay-number">M-Pesa number</Label>
+            <Input
+              id="pay-number"
+              inputMode="tel"
+              value={priceForm.number}
+              onChange={(e) => setPriceForm((f) => ({ ...f, number: e.target.value }))}
+              className="mt-1"
+            />
+          </div>
+        </div>
+        <Button className="mt-3 min-h-11" disabled={savingPrices} onClick={() => void savePrices()}>
+          {savingPrices ? "Saving…" : "Save pricing"}
+        </Button>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5">
         <h2 className="font-display text-base font-semibold">Post an announcement</h2>
         <Textarea
           value={announcement}
