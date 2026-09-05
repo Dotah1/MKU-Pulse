@@ -164,17 +164,31 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       profile,
       isAdmin,
       freeAccessMode,
+      paymentInfo,
       tier,
       limits: TIER_LIMITS[tier],
       refreshProfile: async () => {
         if (session?.user.id) await loadProfile(session.user.id);
       },
+      refreshSettings: loadSettings,
+      setFreeAccessModeLocal: setFreeAccessMode,
+      setPaymentInfoLocal: setPaymentInfo,
       signOut: async () => {
         await disablePush();
         await supabase.auth.signOut();
       },
     }),
-    [loading, session, profile, isAdmin, freeAccessMode, tier, loadProfile],
+    [
+      loading,
+      session,
+      profile,
+      isAdmin,
+      freeAccessMode,
+      paymentInfo,
+      tier,
+      loadProfile,
+      loadSettings,
+    ],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
