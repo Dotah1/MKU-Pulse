@@ -48,8 +48,6 @@ export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
 });
 
-const PRICES: Record<Exclude<Tier, "free">, number> = { mid: 150, full: 300 };
-const MPESA_NUMBER = "0712 345 678";
 
 function ProfilePage() {
   const { profile, user, tier, limits, freeAccessMode, refreshProfile, signOut } = useCampus();
@@ -369,7 +367,11 @@ interface PaymentRow {
 }
 
 function Subscription({ currentTier }: { currentTier: Tier }) {
-  const { user, profile, freeAccessMode } = useCampus();
+  const { user, profile, freeAccessMode, paymentInfo } = useCampus();
+  const PRICES: Record<Exclude<Tier, "free">, number> = {
+    mid: paymentInfo.mid_price,
+    full: paymentInfo.full_price,
+  };
   const [requests, setRequests] = useState<PaymentRow[]>([]);
   const [wanted, setWanted] = useState<Exclude<Tier, "free">>("mid");
   const [code, setCode] = useState("");
@@ -459,7 +461,7 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
 
       <form onSubmit={submit} className="space-y-3 rounded-xl bg-secondary/60 p-4">
         <p className="text-sm">
-          Send your payment to <span className="font-semibold">{MPESA_NUMBER}</span> via M-Pesa,
+          Send your payment to <span className="font-semibold">{paymentInfo.number}</span> via M-Pesa,
           then paste the transaction code below for manual approval.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
