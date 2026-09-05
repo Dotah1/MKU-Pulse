@@ -195,10 +195,12 @@ function ConnectPage() {
               >
                 {current.avatar_url ? (
                   <StoredImage
+                    bucket="avatars"
                     path={current.avatar_url}
                     alt={current.full_name}
                     className="h-96 w-full object-cover"
                   />
+
                 ) : (
                   <div className="flex h-96 items-center justify-center bg-secondary">
                     <UserAvatar path={null} name={current.full_name} className="size-24" />

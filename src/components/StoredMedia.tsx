@@ -58,15 +58,18 @@ export function StoredImage({
   path,
   alt,
   className,
+  bucket = "media",
 }: {
   path: string | null | undefined;
   alt: string;
   className?: string;
+  bucket?: string;
 }) {
-  const url = useStoredUrl("media", path);
+  const url = useStoredUrl(bucket, path);
   if (!url) return null;
   return <img src={url} alt={alt} loading="lazy" className={className} />;
 }
+
 
 export function StoredVideo({
   path,
