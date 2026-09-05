@@ -61,7 +61,29 @@ interface ReportRow {
 }
 
 function AdminPage() {
-  const { isAdmin, user, freeAccessMode } = useCampus();
+  const {
+    isAdmin,
+    user,
+    freeAccessMode,
+    paymentInfo,
+    setFreeAccessModeLocal,
+    setPaymentInfoLocal,
+    refreshSettings,
+  } = useCampus();
+  const [priceForm, setPriceForm] = useState({
+    number: paymentInfo.number,
+    mid_price: String(paymentInfo.mid_price),
+    full_price: String(paymentInfo.full_price),
+  });
+  const [savingPrices, setSavingPrices] = useState(false);
+
+  useEffect(() => {
+    setPriceForm({
+      number: paymentInfo.number,
+      mid_price: String(paymentInfo.mid_price),
+      full_price: String(paymentInfo.full_price),
+    });
+  }, [paymentInfo]);
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [apps, setApps] = useState<MentorAppRow[]>([]);
