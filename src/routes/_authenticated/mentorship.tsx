@@ -205,6 +205,8 @@ function MentorshipPage() {
         </div>
       )}
 
+      <IncomingRequests />
+
       <MentorApplication existing={application} onSubmitted={() => void load()} />
     </div>
   );
