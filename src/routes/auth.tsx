@@ -24,7 +24,7 @@ import {
   sanitizeText,
   type Gender,
 } from "@/lib/campus";
-import { uploadFile } from "@/lib/storage";
+import { savePendingAvatar, uploadPendingAvatar } from "@/lib/pending-avatar";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>) => ({
