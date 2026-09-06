@@ -133,6 +133,23 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     void loadProfile(uid);
   }, [session?.user.id, loadProfile]);
 
+  // If the sign-up photo could not be uploaded yet (email confirmation), finish
+  // the job the first time the student is signed in.
+  useEffect(() => {
+    const uid = session?.user.id;
+    if (!uid || !profile || profile.avatar_url) return;
+    let cancelled = false;
+    void (async () => {
+      const { uploadPendingAvatar } = await import("@/lib/pending-avatar");
+      const done = await uploadPendingAvatar(uid);
+      if (done && !cancelled) await loadProfile(uid);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user.id, profile?.avatar_url, loadProfile]);
+
+
   // Firebase Cloud Messaging: request permission, store the device token and
   // surface foreground pushes as toasts. Works in the browser and inside the
   // WebToAPK build (which supplies the native token on window).
