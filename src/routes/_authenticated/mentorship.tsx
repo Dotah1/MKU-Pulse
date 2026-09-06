@@ -205,6 +205,8 @@ function MentorshipPage() {
         </div>
       )}
 
+      <IncomingRequests />
+
       <MentorApplication existing={application} onSubmitted={() => void load()} />
     </div>
   );
@@ -308,6 +310,116 @@ function MentorApplication({
           </Button>
         </form>
       )}
+    </section>
+  );
+}
+
+interface SessionRequestRow {
+  id: string;
+  student_id: string;
+  topic: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+}
+
+/** Requests students have sent to me as a mentor. */
+function IncomingRequests() {
+  const { user } = useCampus();
+  const navigate = useNavigate();
+  const [rows, setRows] = useState<SessionRequestRow[]>([]);
+  const [people, setPeople] = useState<Record<string, MiniProfile>>({});
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("mentor_sessions")
+      .select("id, student_id, topic, status, created_at")
+      .eq("mentor_id", user.id)
+      .order("created_at", { ascending: false });
+    const list = (data ?? []) as SessionRequestRow[];
+    setRows(list);
+    setPeople(await fetchProfiles(list.map((r) => r.student_id)));
+    setLoading(false);
+  }, [user?.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`mentor-requests-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "mentor_sessions", filter: `mentor_id=eq.${user.id}` },
+        () => void load(),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id, load]);
+
+  const openChat = async (row: SessionRequestRow) => {
+    if (!user) return;
+    try {
+      const id = await getOrCreateConversation(user.id, row.student_id);
+      if (row.status === "pending") {
+        await supabase.from("mentor_sessions").update({ status: "approved" }).eq("id", row.id);
+        setRows((prev) =>
+          prev.map((r) => (r.id === row.id ? { ...r, status: "approved" as const } : r)),
+        );
+      }
+      void navigate({ to: "/messages", search: { c: id } });
+    } catch {
+      toast.error("Could not open that chat");
+    }
+  };
+
+  if (loading || rows.length === 0) return null;
+  const pending = rows.filter((r) => r.status === "pending").length;
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <h2 className="flex items-center gap-2 font-display text-lg font-bold">
+        <MessageCircle className="size-5 text-primary" aria-hidden="true" />
+        Requests for you
+        {pending > 0 && <Badge>{pending} new</Badge>}
+      </h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Students who asked you for help. Tap one to reply in a chat.
+      </p>
+      <ul className="mt-4 space-y-2">
+        {rows.map((r) => {
+          const p = people[r.student_id];
+          return (
+            <li key={r.id}>
+              <button
+                type="button"
+                onClick={() => void openChat(r)}
+                className="flex w-full items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-secondary"
+              >
+                <UserAvatar path={p?.avatar_url} name={p?.full_name ?? "Student"} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold">
+                    {p?.full_name ?? "Student"}
+                  </span>
+                  <span className="block truncate text-sm text-muted-foreground">{r.topic}</span>
+                </span>
+                {r.status === "pending" ? (
+                  <Badge variant="secondary">New</Badge>
+                ) : (
+                  <Badge variant="outline" className="capitalize">
+                    {r.status}
+                  </Badge>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

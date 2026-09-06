@@ -24,7 +24,7 @@ import {
   sanitizeText,
   type Gender,
 } from "@/lib/campus";
-import { uploadFile } from "@/lib/storage";
+import { savePendingAvatar, uploadPendingAvatar } from "@/lib/pending-avatar";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -251,6 +251,10 @@ function SignupForm() {
       return;
     }
 
+    // Keep the chosen photo on the device so it is uploaded automatically as
+    // soon as there is a session — even when the account needs email confirmation.
+    await savePendingAvatar(photo);
+
     // Storage writes need a session — sign in straight away when sign-up didn't return one.
     let userId = data.session?.user.id ?? null;
     if (!userId) {
@@ -263,24 +267,22 @@ function SignupForm() {
 
     if (!userId) {
       setBusy(false);
-      toast.success("Check your Gmail to confirm your account, then sign in to add your photo.");
+      toast.success(
+        "Check your Gmail to confirm your account, then sign in — your photo is saved and will be added automatically.",
+      );
       void navigate({ to: "/auth", search: { mode: "signin" } });
       return;
     }
 
-    try {
-      const path = await uploadFile("avatars", userId, photo);
-      const { error: pErr } = await supabase
-        .from("profiles")
-        .update({ avatar_url: path, gender })
-        .eq("id", userId);
-      if (pErr) throw pErr;
-    } catch {
+    const uploaded = await uploadPendingAvatar(userId);
+    if (!uploaded) {
+      await supabase.from("profiles").update({ gender }).eq("id", userId);
       setBusy(false);
-      toast.error("Account created, but the photo upload failed. Add it from your profile.");
-      void navigate({ to: "/profile" });
+      toast.success("Welcome to Campus Connect! We'll finish adding your photo shortly.");
+      void navigate({ to: "/feed" });
       return;
     }
+    await supabase.from("profiles").update({ gender }).eq("id", userId);
     setBusy(false);
     toast.success("Welcome to Campus Connect!");
     void navigate({ to: "/feed" });

@@ -63,3 +63,23 @@ export async function clearPendingAvatar(): Promise<void> {
     /* ignore */
   }
 }
+
+/**
+ * Upload the saved photo (if any) and attach it to the profile. Returns true
+ * when a photo was stored on the profile.
+ */
+export async function uploadPendingAvatar(userId: string): Promise<boolean> {
+  const { supabase } = await import("@/integrations/supabase/client");
+  const { uploadFile } = await import("@/lib/storage");
+  const file = await takePendingAvatar();
+  if (!file) return false;
+  try {
+    const path = await uploadFile("avatars", userId, file);
+    const { error } = await supabase.from("profiles").update({ avatar_url: path }).eq("id", userId);
+    if (error) throw error;
+    await clearPendingAvatar();
+    return true;
+  } catch {
+    return false;
+  }
+}
