@@ -13,12 +13,12 @@ import { countToday, fetchProfiles, getOrCreateConversation, type MiniProfile } 
 export const Route = createFileRoute("/_authenticated/connect")({
   head: () => ({
     meta: [
-      { title: "Connect — Campus Connect" },
+      { title: "Connect — MKU Pulse" },
       {
         name: "description",
         content: "Swipe through students on your campus, match, and start chatting.",
       },
-      { property: "og:title", content: "Connect — Campus Connect" },
+      { property: "og:title", content: "Connect — MKU Pulse" },
       { property: "og:description", content: "Match with students on your campus." },
     ],
   }),
@@ -143,7 +143,7 @@ function ConnectPage() {
         void notify({
           recipientIds: current.id,
           title: "It's a match!",
-          body: "You matched with someone on Campus Connect.",
+          body: "You matched with someone on MKU Pulse.",
           url: "/connect",
           kind: "match",
         });

@@ -10,10 +10,10 @@ import { passwordProblem } from "@/lib/campus";
 export const Route = createFileRoute("/reset-password")({
   head: () => ({
     meta: [
-      { title: "Set a new password — Campus Connect" },
-      { name: "description", content: "Choose a new password for your Campus Connect account." },
-      { property: "og:title", content: "Set a new password — Campus Connect" },
-      { property: "og:description", content: "Complete your Campus Connect password reset." },
+      { title: "Set a new password — MKU Pulse" },
+      { name: "description", content: "Choose a new password for your MKU Pulse account." },
+      { property: "og:title", content: "Set a new password — MKU Pulse" },
+      { property: "og:description", content: "Complete your MKU Pulse password reset." },
     ],
   }),
   component: ResetPassword,

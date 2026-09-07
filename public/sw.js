@@ -1,4 +1,4 @@
-/* Retired service worker. Campus Connect now uses /firebase-messaging-sw.js for
+/* Retired service worker. MKU Pulse now uses /firebase-messaging-sw.js for
    Firebase Cloud Messaging, so this worker removes itself for returning users. */
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) =>

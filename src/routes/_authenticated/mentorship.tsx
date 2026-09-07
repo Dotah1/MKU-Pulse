@@ -17,13 +17,13 @@ import { fetchProfiles, getOrCreateConversation, type MiniProfile } from "@/lib/
 export const Route = createFileRoute("/_authenticated/mentorship")({
   head: () => ({
     meta: [
-      { title: "Mentorship — Campus Connect" },
+      { title: "Mentorship — MKU Pulse" },
       {
         name: "description",
         content: "Browse approved campus mentors, book sessions and chat — free for every student.",
       },
-      { property: "og:title", content: "Mentorship — Campus Connect" },
-      { property: "og:description", content: "Find a campus mentor on Campus Connect." },
+      { property: "og:title", content: "Mentorship — MKU Pulse" },
+      { property: "og:description", content: "Find a campus mentor on MKU Pulse." },
     ],
   }),
   component: MentorshipPage,

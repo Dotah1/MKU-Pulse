@@ -80,14 +80,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Campus Connect — Campus social, dating & mentorship" },
+      { title: "MKU Pulse — Campus social, dating & mentorship" },
       {
         name: "description",
         content:
-          "Campus Connect brings the campus feed, student matching, mentorship and real-time chat into one app.",
+          "MKU Pulse brings the campus feed, student matching, mentorship and real-time chat into one app.",
       },
-      { name: "author", content: "Campus Connect" },
-      { property: "og:title", content: "Campus Connect" },
+      { name: "author", content: "MKU Pulse" },
+      { property: "og:title", content: "MKU Pulse" },
       { property: "og:description", content: "One app for campus social life." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

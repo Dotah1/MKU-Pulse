@@ -5,13 +5,13 @@ import { Button } from "@/components/ui/button";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Campus Connect — Meet, match & mentor on campus" },
+      { title: "MKU Pulse — Meet, match & mentor on campus" },
       {
         name: "description",
         content:
           "Join your campus feed, match with students, find mentors and chat in real time. Gmail sign-up only.",
       },
-      { property: "og:title", content: "Campus Connect — Meet, match & mentor on campus" },
+      { property: "og:title", content: "MKU Pulse — Meet, match & mentor on campus" },
       {
         property: "og:description",
         content: "The campus social network: feed, matching, mentorship and real-time chat.",
@@ -33,7 +33,7 @@ function Landing() {
     <div className="min-h-screen bg-background">
       <header className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
         <span className="font-display text-lg font-bold">
-          Campus<span className="text-primary">Connect</span>
+          MKU<span className="text-primary">Pulse</span>
         </span>
         <Button asChild variant="ghost" className="min-h-11">
           <Link to="/auth" search={{ mode: "signin" }}>Sign in</Link>
@@ -49,7 +49,7 @@ function Landing() {
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-base text-muted-foreground sm:text-lg">
           A social feed, student matching, free mentorship and real-time messaging — all in
-          Campus Connect.
+          MKU Pulse.
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <Button asChild size="lg" className="min-h-12 px-8">

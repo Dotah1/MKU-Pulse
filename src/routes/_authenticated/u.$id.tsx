@@ -13,15 +13,15 @@ import { getOrCreateConversation } from "@/lib/campus-data";
 export const Route = createFileRoute("/_authenticated/u/$id")({
   head: () => ({
     meta: [
-      { title: "Student profile — Campus Connect" },
+      { title: "Student profile — MKU Pulse" },
       {
         name: "description",
         content: "View a student's campus profile: course, year, interests and recent posts.",
       },
-      { property: "og:title", content: "Student profile — Campus Connect" },
+      { property: "og:title", content: "Student profile — MKU Pulse" },
       {
         property: "og:description",
-        content: "See a student's profile and recent posts on Campus Connect.",
+        content: "See a student's profile and recent posts on MKU Pulse.",
       },
       { property: "og:type", content: "profile" },
       { name: "twitter:card", content: "summary" },

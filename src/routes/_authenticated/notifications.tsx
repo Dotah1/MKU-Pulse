@@ -8,13 +8,13 @@ import type { RouteTo } from "@/lib/links";
 export const Route = createFileRoute("/_authenticated/notifications")({
   head: () => ({
     meta: [
-      { title: "Notifications — Campus Connect" },
+      { title: "Notifications — MKU Pulse" },
       {
         name: "description",
-        content: "Every message, match, mentorship and payment update from Campus Connect in one place.",
+        content: "Every message, match, mentorship and payment update from MKU Pulse in one place.",
       },
-      { property: "og:title", content: "Notifications — Campus Connect" },
-      { property: "og:description", content: "Your Campus Connect notification centre." },
+      { property: "og:title", content: "Notifications — MKU Pulse" },
+      { property: "og:description", content: "Your MKU Pulse notification centre." },
     ],
   }),
   component: NotificationsPage,
