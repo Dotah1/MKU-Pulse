@@ -222,6 +222,7 @@ export type Database = {
           created_at: string
           id: string
           read_at: string | null
+          reply_to_id: string | null
           sender_id: string
         }
         Insert: {
@@ -230,6 +231,7 @@ export type Database = {
           created_at?: string
           id?: string
           read_at?: string | null
+          reply_to_id?: string | null
           sender_id: string
         }
         Update: {
@@ -238,6 +240,7 @@ export type Database = {
           created_at?: string
           id?: string
           read_at?: string | null
+          reply_to_id?: string | null
           sender_id?: string
         }
         Relationships: [
@@ -246,6 +249,13 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
             referencedColumns: ["id"]
           },
         ]
@@ -328,11 +338,113 @@ export type Database = {
         }
         Relationships: []
       }
+      poll_options: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          poll_id: string
+          position: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          poll_id: string
+          position?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          poll_id?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poll_options_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "polls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      poll_votes: {
+        Row: {
+          created_at: string
+          id: string
+          option_id: string
+          poll_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          option_id: string
+          poll_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          option_id?: string
+          poll_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poll_votes_option_id_fkey"
+            columns: ["option_id"]
+            isOneToOne: false
+            referencedRelation: "poll_options"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "poll_votes_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "polls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      polls: {
+        Row: {
+          closes_at: string | null
+          created_at: string
+          created_by: string
+          id: string
+          is_active: boolean
+          question: string
+          updated_at: string
+        }
+        Insert: {
+          closes_at?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          is_active?: boolean
+          question: string
+          updated_at?: string
+        }
+        Update: {
+          closes_at?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_active?: boolean
+          question?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       post_comments: {
         Row: {
           content: string
           created_at: string
           id: string
+          parent_id: string | null
           post_id: string
           user_id: string
         }
@@ -340,6 +452,7 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          parent_id?: string | null
           post_id: string
           user_id: string
         }
@@ -347,10 +460,18 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          parent_id?: string | null
           post_id?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "post_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "post_comments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "post_comments_post_id_fkey"
             columns: ["post_id"]
@@ -398,6 +519,7 @@ export type Database = {
           is_announcement: boolean
           updated_at: string
           user_id: string
+          video_seconds: number | null
           video_url: string | null
         }
         Insert: {
@@ -408,6 +530,7 @@ export type Database = {
           is_announcement?: boolean
           updated_at?: string
           user_id: string
+          video_seconds?: number | null
           video_url?: string | null
         }
         Update: {
@@ -418,6 +541,7 @@ export type Database = {
           is_announcement?: boolean
           updated_at?: string
           user_id?: string
+          video_seconds?: number | null
           video_url?: string | null
         }
         Relationships: []
@@ -457,6 +581,7 @@ export type Database = {
           major: string
           notifications_enabled: boolean
           pending_tier: Database["public"]["Enums"]["sub_tier"] | null
+          post_block_until: string | null
           tier: Database["public"]["Enums"]["sub_tier"]
           tier_expires_at: string | null
           updated_at: string
@@ -475,6 +600,7 @@ export type Database = {
           major?: string
           notifications_enabled?: boolean
           pending_tier?: Database["public"]["Enums"]["sub_tier"] | null
+          post_block_until?: string | null
           tier?: Database["public"]["Enums"]["sub_tier"]
           tier_expires_at?: string | null
           updated_at?: string
@@ -493,6 +619,7 @@ export type Database = {
           major?: string
           notifications_enabled?: boolean
           pending_tier?: Database["public"]["Enums"]["sub_tier"] | null
+          post_block_until?: string | null
           tier?: Database["public"]["Enums"]["sub_tier"]
           tier_expires_at?: string | null
           updated_at?: string
