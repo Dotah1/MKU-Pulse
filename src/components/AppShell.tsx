@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-border bg-card/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-5xl items-center gap-3 px-4">
           <Link to="/feed" className="font-display text-lg font-bold tracking-tight">
-            Campus<span className="text-primary">Connect</span>
+            MKU<span className="text-primary">Pulse</span>
           </Link>
 
           <nav aria-label="Main" className="ml-6 hidden items-center gap-1 md:flex">

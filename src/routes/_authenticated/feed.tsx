@@ -17,13 +17,13 @@ import { countToday } from "@/lib/campus-data";
 export const Route = createFileRoute("/_authenticated/feed")({
   head: () => ({
     meta: [
-      { title: "Campus feed — Campus Connect" },
+      { title: "Campus feed — MKU Pulse" },
       {
         name: "description",
         content: "See what your campus is posting: updates, photos, clips and announcements.",
       },
-      { property: "og:title", content: "Campus feed — Campus Connect" },
-      { property: "og:description", content: "The live campus feed on Campus Connect." },
+      { property: "og:title", content: "Campus feed — MKU Pulse" },
+      { property: "og:description", content: "The live campus feed on MKU Pulse." },
     ],
   }),
   component: FeedPage,

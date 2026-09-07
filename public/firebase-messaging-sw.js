@@ -1,4 +1,4 @@
-/* Firebase Cloud Messaging service worker for Campus Connect.
+/* Firebase Cloud Messaging service worker for MKU Pulse.
    The page registers this worker with its Firebase config in the query string,
    so no keys are hardcoded here. */
 importScripts("https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js");
@@ -22,7 +22,7 @@ if (config.apiKey && config.messagingSenderId && config.appId) {
   // Fires for data-only messages while the app is in the background.
   messaging.onBackgroundMessage((payload) => {
     const data = payload.data || {};
-    const title = (payload.notification && payload.notification.title) || data.title || "Campus Connect";
+    const title = (payload.notification && payload.notification.title) || data.title || "MKU Pulse";
     const body = (payload.notification && payload.notification.body) || data.body || "";
     self.registration.showNotification(title, {
       body,

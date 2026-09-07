@@ -19,13 +19,13 @@ import { fetchProfiles, type MiniProfile } from "@/lib/campus-data";
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
     meta: [
-      { title: "Admin panel — Campus Connect" },
+      { title: "Admin panel — MKU Pulse" },
       {
         name: "description",
         content: "Approve M-Pesa payments and mentors, moderate reports and post announcements.",
       },
-      { property: "og:title", content: "Admin panel — Campus Connect" },
-      { property: "og:description", content: "Campus Connect administration tools." },
+      { property: "og:title", content: "Admin panel — MKU Pulse" },
+      { property: "og:description", content: "MKU Pulse administration tools." },
     ],
   }),
   component: AdminPage,
@@ -147,7 +147,7 @@ function AdminPage() {
         <ShieldAlert className="mx-auto size-8 text-destructive" aria-hidden="true" />
         <h1 className="mt-3 font-display text-xl font-bold">Admins only</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          This area is restricted to the Campus Connect admin account.
+          This area is restricted to the MKU Pulse admin account.
         </p>
       </div>
     );
@@ -295,7 +295,7 @@ function AdminPage() {
     <div className="space-y-6">
       <header>
         <h1 className="font-display text-2xl font-bold">Admin panel</h1>
-        <p className="text-sm text-muted-foreground">Campus Connect operations</p>
+        <p className="text-sm text-muted-foreground">MKU Pulse operations</p>
       </header>
 
       <div className="grid grid-cols-3 gap-3">

@@ -17,12 +17,12 @@ export const Route = createFileRoute("/_authenticated/messages")({
   }),
   head: () => ({
     meta: [
-      { title: "Messages — Campus Connect" },
+      { title: "Messages — MKU Pulse" },
       {
         name: "description",
         content: "Your unified campus inbox with real-time chat and typing indicators.",
       },
-      { property: "og:title", content: "Messages — Campus Connect" },
+      { property: "og:title", content: "Messages — MKU Pulse" },
       { property: "og:description", content: "Real-time chat with matches and mentors." },
     ],
   }),
@@ -281,7 +281,7 @@ function ChatPane({
         <div>
           <p className="text-sm font-semibold">{other?.full_name ?? "Student"}</p>
           <p className="text-xs text-muted-foreground">
-            {otherTyping ? "typing…" : other?.major || "Campus Connect"}
+            {otherTyping ? "typing…" : other?.major || "MKU Pulse"}
           </p>
         </div>
       </header>

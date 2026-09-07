@@ -106,7 +106,7 @@ export async function enablePush(
     onMessage(messaging, (payload) => {
       const data = payload.data ?? {};
       onForeground({
-        title: payload.notification?.title ?? data['title'] ?? "Campus Connect",
+        title: payload.notification?.title ?? data['title'] ?? "MKU Pulse",
         body: payload.notification?.body ?? data['body'] ?? "",
         url: data['url'] ?? "/notifications",
       });

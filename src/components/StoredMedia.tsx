@@ -74,11 +74,34 @@ export function StoredImage({
 export function StoredVideo({
   path,
   className,
+  maxSeconds,
 }: {
   path: string | null | undefined;
   className?: string;
+  /** Only play the first N seconds of the clip (used for the 60s feed limit). */
+  maxSeconds?: number | null;
 }) {
   const url = useStoredUrl("media", path);
   if (!url) return null;
-  return <video src={url} controls playsInline className={className} />;
+  const limit = maxSeconds && maxSeconds > 0 ? maxSeconds : null;
+  return (
+    <video
+      src={limit ? `${url}#t=0,${limit}` : url}
+      controls
+      playsInline
+      className={className}
+      onTimeUpdate={
+        limit
+          ? (e) => {
+              const el = e.currentTarget;
+              if (el.currentTime > limit) {
+                el.pause();
+                el.currentTime = limit;
+              }
+            }
+          : undefined
+      }
+    />
+  );
 }
+

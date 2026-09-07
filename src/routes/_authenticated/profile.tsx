@@ -36,13 +36,13 @@ import { disablePush, enablePush } from "@/lib/push";
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({
     meta: [
-      { title: "Your profile & plan — Campus Connect" },
+      { title: "Your profile & plan — MKU Pulse" },
       {
         name: "description",
         content: "Update your campus profile, manage notifications and upgrade your plan via M-Pesa.",
       },
-      { property: "og:title", content: "Your profile & plan — Campus Connect" },
-      { property: "og:description", content: "Manage your Campus Connect profile and plan." },
+      { property: "og:title", content: "Your profile & plan — MKU Pulse" },
+      { property: "og:description", content: "Manage your MKU Pulse profile and plan." },
     ],
   }),
   component: ProfilePage,

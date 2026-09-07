@@ -32,12 +32,12 @@ export const Route = createFileRoute("/auth")({
   }),
   head: () => ({
     meta: [
-      { title: "Sign in or join — Campus Connect" },
+      { title: "Sign in or join — MKU Pulse" },
       {
         name: "description",
-        content: "Create your Campus Connect account with your Gmail address, or sign back in.",
+        content: "Create your MKU Pulse account with your Gmail address, or sign back in.",
       },
-      { property: "og:title", content: "Sign in or join — Campus Connect" },
+      { property: "og:title", content: "Sign in or join — MKU Pulse" },
       { property: "og:description", content: "Gmail-only sign up for university students." },
     ],
   }),
@@ -52,7 +52,7 @@ function AuthPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10">
       <Link to="/" className="mb-6 font-display text-2xl font-bold">
-        Campus<span className="text-primary">Connect</span>
+        MKU<span className="text-primary">Pulse</span>
       </Link>
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-sm">
         <h1 className="font-display text-xl font-bold">
@@ -69,7 +69,7 @@ function AuthPage() {
         </div>
 
         <p className="mt-5 text-center text-sm text-muted-foreground">
-          {isSignup ? "Already have an account?" : "New to Campus Connect?"}{" "}
+          {isSignup ? "Already have an account?" : "New to MKU Pulse?"}{" "}
           <button
             type="button"
             className="min-h-11 font-semibold text-primary underline-offset-2 hover:underline"
@@ -278,13 +278,13 @@ function SignupForm() {
     if (!uploaded) {
       await supabase.from("profiles").update({ gender }).eq("id", userId);
       setBusy(false);
-      toast.success("Welcome to Campus Connect! We'll finish adding your photo shortly.");
+      toast.success("Welcome to MKU Pulse! We'll finish adding your photo shortly.");
       void navigate({ to: "/feed" });
       return;
     }
     await supabase.from("profiles").update({ gender }).eq("id", userId);
     setBusy(false);
-    toast.success("Welcome to Campus Connect!");
+    toast.success("Welcome to MKU Pulse!");
     void navigate({ to: "/feed" });
   };
 
