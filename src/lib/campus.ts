@@ -13,6 +13,8 @@ export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
 export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 /** Feed uploads must stay under 25MB. */
 export const POST_MEDIA_MAX_BYTES = 25 * 1024 * 1024;
+/** Feed videos play for at most 60 seconds. */
+export const POST_VIDEO_MAX_SECONDS = 60;
 export const YEAR_OPTIONS = ["1", "2", "3", "4", "5", "6"];
 
 export interface Profile {
@@ -55,7 +57,7 @@ export const TIER_LIMITS: Record<Tier, TierLimits> = {
   },
   mid: {
     label: "Mid",
-    postsPerDay: 10,
+    postsPerDay: 5,
     canPostImage: true,
     canPostVideo: false,
     swipesPerDay: 50,
@@ -64,7 +66,7 @@ export const TIER_LIMITS: Record<Tier, TierLimits> = {
   },
   full: {
     label: "Full",
-    postsPerDay: 1000,
+    postsPerDay: 10,
     canPostImage: true,
     canPostVideo: true,
     swipesPerDay: 1000,
@@ -96,10 +98,15 @@ export function effectiveTier(
   profile: Pick<Profile, "tier" | "tier_expires_at"> | null,
   freeAccessMode: boolean,
 ): Tier {
-  if (freeAccessMode) return "full";
-  if (!profile) return "free";
-  if (profile.tier !== "free" && isExpired(profile.tier_expires_at)) return "free";
-  return profile.tier;
+  // Free Access Mode lifts free members to the Mid plan; anyone who paid keeps
+  // the plan they bought.
+  const paid =
+    profile && profile.tier !== "free" && !isExpired(profile.tier_expires_at)
+      ? profile.tier
+      : null;
+  if (paid) return paid;
+  if (freeAccessMode) return "mid";
+  return "free";
 }
 
 export function daysLeft(expiresAt: string | null): number {
