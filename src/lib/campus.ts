@@ -30,6 +30,7 @@ export interface Profile {
   tier_expires_at: string | null;
   pending_tier: Tier | null;
   is_banned: boolean;
+  post_block_until: string | null;
   notifications_enabled: boolean;
   is_private: boolean;
   created_at: string;

@@ -5,12 +5,22 @@ import { Image as ImageIcon, Loader2, Video, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCampus } from "@/hooks/useCampus";
 import { PostCard, usePostAuthors, type PostRow } from "@/components/PostCard";
+import {
+  PollCard,
+  fetchFeedPolls,
+  type PollOptionRow,
+  type PollRow,
+} from "@/components/PollCard";
 import { UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { sanitizeText } from "@/lib/campus";
+import {
+  POST_MEDIA_MAX_BYTES,
+  POST_VIDEO_MAX_SECONDS,
+  sanitizeText,
+} from "@/lib/campus";
 import { uploadFile, videoDuration } from "@/lib/storage";
 import { countToday } from "@/lib/campus-data";
 
@@ -20,7 +30,7 @@ export const Route = createFileRoute("/_authenticated/feed")({
       { title: "Campus feed — MKU Pulse" },
       {
         name: "description",
-        content: "See what your campus is posting: updates, photos, clips and announcements.",
+        content: "See what your campus is posting: updates, photos, clips, polls and announcements.",
       },
       { property: "og:title", content: "Campus feed — MKU Pulse" },
       { property: "og:description", content: "The live campus feed on MKU Pulse." },
@@ -32,19 +42,28 @@ export const Route = createFileRoute("/_authenticated/feed")({
 function FeedPage() {
   const { user, profile, isAdmin, limits, tier } = useCampus();
   const [posts, setPosts] = useState<PostRow[]>([]);
+  const [polls, setPolls] = useState<PollRow[]>([]);
+  const [pollOptions, setPollOptions] = useState<Record<string, PollOptionRow[]>>({});
   const [loading, setLoading] = useState(true);
   const [usedToday, setUsedToday] = useState(0);
   const authors = usePostAuthors(posts);
 
   const load = async () => {
-    const { data, error } = await supabase
-      .from("posts")
-      .select("id, user_id, content, image_url, video_url, is_announcement, created_at")
-      .order("is_announcement", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(60);
+    const [{ data, error }, pollData] = await Promise.all([
+      supabase
+        .from("posts")
+        .select(
+          "id, user_id, content, image_url, video_url, video_seconds, is_announcement, created_at",
+        )
+        .order("is_announcement", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(60),
+      fetchFeedPolls(),
+    ]);
     if (error) toast.error(error.message);
     setPosts((data ?? []) as PostRow[]);
+    setPolls(pollData.polls);
+    setPollOptions(pollData.options);
     setLoading(false);
   };
 
@@ -57,6 +76,9 @@ function FeedPage() {
     void countToday("posts", "user_id", user.id).then(setUsedToday);
   }, [user?.id, posts.length]);
 
+  const blockedUntil = profile?.post_block_until ?? null;
+  const blocked = blockedUntil ? new Date(blockedUntil).getTime() > Date.now() : false;
+
   return (
     <div className="space-y-4">
       <header>
@@ -68,12 +90,29 @@ function FeedPage() {
         </p>
       </header>
 
-      <Composer
-        onPosted={() => {
-          void load();
-        }}
-        usedToday={usedToday}
-      />
+      {blocked && blockedUntil && (
+        <p className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+          An admin has paused your posting until {new Date(blockedUntil).toLocaleString()}.
+        </p>
+      )}
+
+      {!blocked && (
+        <Composer
+          onPosted={() => {
+            void load();
+          }}
+          usedToday={usedToday}
+        />
+      )}
+
+      {polls.map((poll) => (
+        <PollCard
+          key={poll.id}
+          poll={poll}
+          options={pollOptions[poll.id] ?? []}
+          onDeleted={(id) => setPolls((list) => list.filter((p) => p.id !== id))}
+        />
+      ))}
 
       {loading ? (
         <div className="flex justify-center py-10">
@@ -98,7 +137,7 @@ function FeedPage() {
 
       {isAdmin && profile && (
         <p className="pb-4 text-center text-xs text-muted-foreground">
-          Signed in as admin — you can post announcements and remove any post.
+          Signed in as admin — you can post announcements, run polls and remove any post.
         </p>
       )}
     </div>
@@ -116,6 +155,7 @@ function Composer({
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [kind, setKind] = useState<"image" | "video" | null>(null);
+  const [clipSeconds, setClipSeconds] = useState<number | null>(null);
   const [announcement, setAnnouncement] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -131,16 +171,19 @@ function Composer({
       toast.error("Video posts need the Full plan");
       return;
     }
-    if (f.size > 25 * 1024 * 1024) {
+    if (f.size > POST_MEDIA_MAX_BYTES) {
       toast.error("Files must be under 25MB");
       return;
     }
+    let seconds: number | null = null;
     if (want === "video") {
       try {
         const d = await videoDuration(f);
-        if (d > 60) {
-          toast.error("Videos must be 60 seconds or shorter");
-          return;
+        seconds = Math.min(Math.round(d), POST_VIDEO_MAX_SECONDS);
+        if (d > POST_VIDEO_MAX_SECONDS) {
+          toast.warning(
+            `That clip is ${Math.round(d)} seconds long — only the first ${POST_VIDEO_MAX_SECONDS} seconds will be posted.`,
+          );
         }
       } catch {
         toast.error("Could not read that video");
@@ -149,6 +192,13 @@ function Composer({
     }
     setFile(f);
     setKind(want);
+    setClipSeconds(seconds);
+  };
+
+  const clearFile = () => {
+    setFile(null);
+    setKind(null);
+    setClipSeconds(null);
   };
 
   const submit = async () => {
@@ -180,12 +230,12 @@ function Composer({
         content: text,
         image_url: imagePath,
         video_url: videoPath,
+        video_seconds: videoPath ? (clipSeconds ?? POST_VIDEO_MAX_SECONDS) : null,
         is_announcement: isAdmin ? announcement : false,
       });
       if (error) throw error;
       setContent("");
-      setFile(null);
-      setKind(null);
+      clearFile();
       setAnnouncement(false);
       toast.success("Posted");
       onPosted();
@@ -217,15 +267,15 @@ function Composer({
 
       {file && (
         <div className="mt-3 flex items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-sm">
-          <span className="truncate">{file.name}</span>
+          <span className="truncate">
+            {file.name}
+            {kind === "video" && clipSeconds ? ` · first ${clipSeconds}s` : ""}
+          </span>
           <Button
             variant="ghost"
             size="sm"
             className="ml-auto min-h-11"
-            onClick={() => {
-              setFile(null);
-              setKind(null);
-            }}
+            onClick={clearFile}
             aria-label="Remove attachment"
           >
             <X className="size-4" aria-hidden="true" />
