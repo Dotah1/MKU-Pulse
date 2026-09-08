@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Send } from "lucide-react";
+import { ArrowLeft, Loader2, Reply, Send, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notify } from "@/lib/notify";
 import { useCampus } from "@/hooks/useCampus";
@@ -42,6 +42,7 @@ interface MessageRow {
   conversation_id: string;
   sender_id: string;
   content: string;
+  reply_to_id: string | null;
   read_at: string | null;
   created_at: string;
 }
@@ -111,16 +112,23 @@ function MessagesPage() {
             const otherId = conv.user_a === user?.id ? conv.user_b : conv.user_a;
             const p = people[otherId];
             return (
-              <li key={conv.id}>
-                <button
-                  onClick={() => void navigate({ to: "/messages", search: { c: conv.id } })}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-secondary"
+              <li key={conv.id} className="flex items-center gap-3 px-4 hover:bg-secondary">
+                <Link
+                  to="/u/$id"
+                  params={{ id: otherId }}
+                  aria-label={`View ${p?.full_name ?? "student"}'s profile`}
+                  className="shrink-0 py-3"
                 >
                   <UserAvatar
                     path={p?.avatar_url}
                     name={p?.full_name ?? "Student"}
                     className="size-11"
                   />
+                </Link>
+                <button
+                  onClick={() => void navigate({ to: "/messages", search: { c: conv.id } })}
+                  className="flex flex-1 items-center gap-3 py-3 text-left"
+                >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{p?.full_name ?? "Student"}</p>
                     <p className="truncate text-xs text-muted-foreground">
@@ -153,6 +161,7 @@ function ChatPane({
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [draft, setDraft] = useState("");
   const [otherTyping, setOtherTyping] = useState(false);
+  const [replyTo, setReplyTo] = useState<MessageRow | null>(null);
   const [sending, setSending] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
   const otherId = useMemo(
@@ -163,7 +172,7 @@ function ChatPane({
   const load = useCallback(async () => {
     const { data } = await supabase
       .from("messages")
-      .select("id, conversation_id, sender_id, content, read_at, created_at")
+      .select("id, conversation_id, sender_id, content, reply_to_id, read_at, created_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true })
       .limit(300);
@@ -249,7 +258,12 @@ function ChatPane({
     setSending(true);
     const { error } = await supabase
       .from("messages")
-      .insert({ conversation_id: conversation.id, sender_id: user.id, content: text });
+      .insert({
+        conversation_id: conversation.id,
+        sender_id: user.id,
+        content: text,
+        reply_to_id: replyTo?.id ?? null,
+      });
     if (error) {
       setSending(false);
       toast.error(error.message);
@@ -260,6 +274,7 @@ function ChatPane({
       .update({ last_message: text, last_message_at: new Date().toISOString() })
       .eq("id", conversation.id);
     setDraft("");
+    setReplyTo(null);
     setSending(false);
     void notify({
       recipientIds: otherId,
@@ -277,9 +292,13 @@ function ChatPane({
         <Button variant="ghost" size="sm" className="min-h-11" onClick={onBack} aria-label="Back to inbox">
           <ArrowLeft className="size-4" aria-hidden="true" />
         </Button>
-        <UserAvatar path={other?.avatar_url} name={other?.full_name ?? "Student"} className="size-9" />
+        <Link to="/u/$id" params={{ id: otherId }} aria-label="View profile">
+          <UserAvatar path={other?.avatar_url} name={other?.full_name ?? "Student"} className="size-9" />
+        </Link>
         <div>
-          <p className="text-sm font-semibold">{other?.full_name ?? "Student"}</p>
+          <Link to="/u/$id" params={{ id: otherId }}>
+            <p className="text-sm font-semibold hover:underline">{other?.full_name ?? "Student"}</p>
+          </Link>
           <p className="text-xs text-muted-foreground">
             {otherTyping ? "typing…" : other?.major || "MKU Pulse"}
           </p>
@@ -289,8 +308,22 @@ function ChatPane({
       <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
         {messages.map((m) => {
           const mine = m.sender_id === user?.id;
+          const quoted = m.reply_to_id ? messages.find((x) => x.id === m.reply_to_id) : null;
           return (
-            <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+            <div
+              key={m.id}
+              className={`group flex items-center gap-1 ${mine ? "justify-end" : "justify-start"}`}
+            >
+              {mine && (
+                <button
+                  type="button"
+                  onClick={() => setReplyTo(m)}
+                  aria-label="Reply to this message"
+                  className="text-muted-foreground opacity-60 hover:text-primary"
+                >
+                  <Reply className="size-4" aria-hidden="true" />
+                </button>
+              )}
               <div
                 className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
                   mine
@@ -298,18 +331,52 @@ function ChatPane({
                     : "bg-secondary text-secondary-foreground"
                 }`}
               >
+                {quoted && (
+                  <p
+                    className={`mb-1 truncate border-l-2 pl-2 text-xs ${
+                      mine
+                        ? "border-primary-foreground/50 text-primary-foreground/80"
+                        : "border-primary/50 text-muted-foreground"
+                    }`}
+                  >
+                    {quoted.sender_id === user?.id ? "You" : other?.full_name ?? "Student"}:{" "}
+                    {quoted.content}
+                  </p>
+                )}
                 <p className="whitespace-pre-wrap">{m.content}</p>
                 <p className={`mt-1 text-[10px] ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
                   {timeAgo(m.created_at)}
                   {mine ? (m.read_at ? " · Read" : " · Sent") : ""}
                 </p>
               </div>
+              {!mine && (
+                <button
+                  type="button"
+                  onClick={() => setReplyTo(m)}
+                  aria-label="Reply to this message"
+                  className="text-muted-foreground opacity-60 hover:text-primary"
+                >
+                  <Reply className="size-4" aria-hidden="true" />
+                </button>
+              )}
             </div>
           );
         })}
         {otherTyping && <p className="text-xs text-muted-foreground">typing…</p>}
         <div ref={bottom} />
       </div>
+
+      {replyTo && (
+        <div className="flex items-center gap-2 border-t border-border bg-secondary/60 px-3 py-2 text-xs">
+          <span className="min-w-0 flex-1 truncate">
+            Replying to {replyTo.sender_id === user?.id ? "yourself" : other?.full_name ?? "student"}:{" "}
+            {replyTo.content}
+          </span>
+          <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       <div className="flex items-end gap-2 border-t border-border p-3">
         <Textarea
