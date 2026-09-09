@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { Loader2, ShieldAlert, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notify } from "@/lib/notify";
+import { deleteUserAccount } from "@/lib/admin.functions";
 import { useCampus } from "@/hooks/useCampus";
 import { UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TIER_LIMITS, sanitizeText, timeAgo, type Tier } from "@/lib/campus";
 import { fetchProfiles, type MiniProfile } from "@/lib/campus-data";
+
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -93,6 +95,15 @@ function AdminPage() {
   const [people, setPeople] = useState<Record<string, MiniProfile>>({});
   const [stats, setStats] = useState({ students: 0, posts: 0, matches: 0 });
   const [announcement, setAnnouncement] = useState("");
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollChoices, setPollChoices] = useState(["", "", "", ""]);
+  const [pollBusy, setPollBusy] = useState(false);
+  const [userQuery, setUserQuery] = useState("");
+  const [found, setFound] = useState<
+    (MiniProfile & { is_banned: boolean; post_block_until: string | null })[]
+  >([]);
+  const [searching, setSearching] = useState(false);
+
 
   const load = useCallback(async () => {
     const [p, a, r, students, posts, matches] = await Promise.all([
@@ -109,8 +120,9 @@ function AdminPage() {
       supabase
         .from("reports")
         .select("id, reporter_id, target_type, target_id, reason, status, created_at")
-        .eq("status", "pending")
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .limit(200),
+
       supabase.from("profiles").select("id", { count: "exact", head: true }),
       supabase.from("posts").select("id", { count: "exact", head: true }),
       supabase.from("matches").select("id", { count: "exact", head: true }),
