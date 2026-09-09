@@ -278,7 +278,10 @@ function AdminPage() {
   };
 
   const resolveReport = async (row: ReportRow, ban: boolean) => {
-    await supabase.from("reports").update({ status: "approved" }).eq("id", row.id);
+    await supabase
+      .from("reports")
+      .update({ status: ban ? "approved" : "rejected" })
+      .eq("id", row.id);
     if (ban && row.target_type === "user") {
       await supabase.from("profiles").update({ is_banned: true }).eq("id", row.target_id);
     }
@@ -611,7 +614,9 @@ function AdminPage() {
           <TabsList>
             <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
             <TabsTrigger value="mentors">Mentors ({apps.length})</TabsTrigger>
-            <TabsTrigger value="reports">Reports ({reports.length})</TabsTrigger>
+            <TabsTrigger value="reports">
+              Reports ({reports.filter((r) => r.status === "pending").length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="payments" className="space-y-3">
