@@ -291,7 +291,7 @@ function ProfilePage() {
         <div>
           <Label>Interests</Label>
           <div className="mt-2 flex flex-wrap gap-2">
-            {INTEREST_OPTIONS.map((i) => {
+            {Array.from(new Set([...INTEREST_OPTIONS, ...interests])).map((i) => {
               const on = interests.includes(i);
               return (
                 <button
@@ -314,7 +314,29 @@ function ProfilePage() {
               );
             })}
           </div>
+          <div className="mt-2 flex gap-2">
+            <Input
+              id="p-own-interest"
+              value={ownInterest}
+              onChange={(e) => setOwnInterest(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addOwnInterest();
+                }
+              }}
+              maxLength={30}
+              placeholder="Add your own interest"
+              aria-label="Add your own interest"
+              className="min-h-11"
+            />
+            <Button type="button" variant="outline" className="min-h-11" onClick={addOwnInterest}>
+              Add
+            </Button>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">Up to 10 interests.</p>
         </div>
+
         <Button type="submit" disabled={saving} className="min-h-11">
           {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
           Save changes

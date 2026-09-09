@@ -381,6 +381,21 @@ function IncomingRequests() {
   if (loading || rows.length === 0) return null;
   const pending = rows.filter((r) => r.status === "pending").length;
 
+  // One line per student: repeat requests are counted instead of repeated.
+  const grouped = rows.reduce<{ latest: SessionRequestRow; count: number; pending: number }[]>(
+    (acc, r) => {
+      const found = acc.find((g) => g.latest.student_id === r.student_id);
+      if (found) {
+        found.count += 1;
+        if (r.status === "pending") found.pending += 1;
+        return acc;
+      }
+      acc.push({ latest: r, count: 1, pending: r.status === "pending" ? 1 : 0 });
+      return acc;
+    },
+    [],
+  );
+
   return (
     <section className="rounded-2xl border border-border bg-card p-5">
       <h2 className="flex items-center gap-2 font-display text-lg font-bold">
@@ -392,10 +407,11 @@ function IncomingRequests() {
         Students who asked you for help. Tap one to reply in a chat.
       </p>
       <ul className="mt-4 space-y-2">
-        {rows.map((r) => {
+        {grouped.map((g) => {
+          const r = g.latest;
           const p = people[r.student_id];
           return (
-            <li key={r.id}>
+            <li key={r.student_id}>
               <button
                 type="button"
                 onClick={() => void openChat(r)}
@@ -407,8 +423,13 @@ function IncomingRequests() {
                     {p?.full_name ?? "Student"}
                   </span>
                   <span className="block truncate text-sm text-muted-foreground">{r.topic}</span>
+                  {g.count > 1 && (
+                    <span className="block text-xs text-muted-foreground">
+                      {g.count} requests sent
+                    </span>
+                  )}
                 </span>
-                {r.status === "pending" ? (
+                {g.pending > 0 ? (
                   <Badge variant="secondary">New</Badge>
                 ) : (
                   <Badge variant="outline" className="capitalize">
@@ -423,3 +444,4 @@ function IncomingRequests() {
     </section>
   );
 }
+
