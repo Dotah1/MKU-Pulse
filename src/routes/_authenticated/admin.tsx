@@ -303,6 +303,99 @@ function AdminPage() {
     }
   };
 
+  const createPoll = async () => {
+    if (!user) return;
+    const question = sanitizeText(pollQuestion, 200);
+    const choices = pollChoices.map((c) => sanitizeText(c, 80)).filter(Boolean);
+    if (!question) {
+      toast.error("Type the poll question");
+      return;
+    }
+    if (choices.length < 2) {
+      toast.error("Add at least two choices");
+      return;
+    }
+    setPollBusy(true);
+    const { data, error } = await supabase
+      .from("polls")
+      .insert({ question, created_by: user.id })
+      .select("id")
+      .single();
+    if (error || !data) {
+      setPollBusy(false);
+      toast.error(error?.message ?? "Could not create the poll");
+      return;
+    }
+    const { error: optError } = await supabase
+      .from("poll_options")
+      .insert(choices.map((label, i) => ({ poll_id: data.id, label, position: i })));
+    setPollBusy(false);
+    if (optError) {
+      toast.error(optError.message);
+      return;
+    }
+    setPollQuestion("");
+    setPollChoices(["", "", "", ""]);
+    toast.success("Poll published to the feed");
+  };
+
+  const searchUsers = async () => {
+    const q = userQuery.trim();
+    if (!q) return;
+    setSearching(true);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url, major, year_of_study, is_banned, post_block_until")
+      .ilike("full_name", `%${q}%`)
+      .limit(20);
+    setSearching(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setFound((data ?? []) as typeof found);
+  };
+
+  const patchUser = async (
+    id: string,
+    patch: { is_banned?: boolean; post_block_until?: string | null },
+  ) => {
+    const { error } = await supabase.from("profiles").update(patch).eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setFound((list) => list.map((u) => (u.id === id ? { ...u, ...patch } : u)));
+    toast.success("Member updated");
+  };
+
+  const blockPosting = async (id: string, hours: number) => {
+    const until = hours > 0 ? new Date(Date.now() + hours * 3_600_000).toISOString() : null;
+    await patchUser(id, { post_block_until: until });
+    if (hours > 0) {
+      void notify({
+        recipientIds: id,
+        title: "Posting paused",
+        body: `An admin paused your posting for ${hours >= 24 ? `${hours / 24} day(s)` : `${hours} hour(s)`}.`,
+        url: "/feed",
+        kind: "moderation",
+      });
+    }
+  };
+
+  const removeAccount = async (id: string, name: string) => {
+    if (!window.confirm(`Delete ${name}'s account permanently? This cannot be undone.`)) return;
+    try {
+      await deleteUserAccount({ data: { userId: id } });
+      setFound((list) => list.filter((u) => u.id !== id));
+      toast.success("Account deleted");
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not delete that account");
+    }
+  };
+
+
   return (
     <div className="space-y-6">
       <header>
