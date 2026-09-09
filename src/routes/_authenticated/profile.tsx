@@ -60,7 +60,18 @@ function ProfilePage() {
   const [gender, setGender] = useState<Gender | "">("");
   const [bio, setBio] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
+  const [ownInterest, setOwnInterest] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const addOwnInterest = () => {
+    const value = sanitizeText(ownInterest, 30).trim();
+    if (!value) return;
+    setInterests((list) =>
+      list.some((x) => x.toLowerCase() === value.toLowerCase()) ? list : [...list, value].slice(0, 10),
+    );
+    setOwnInterest("");
+  };
+
 
   useEffect(() => {
     if (!profile) return;
