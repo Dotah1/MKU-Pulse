@@ -488,6 +488,122 @@ function AdminPage() {
         </Button>
       </section>
 
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <h2 className="font-display text-base font-semibold">Create a poll</h2>
+        <p className="text-sm text-muted-foreground">
+          Students vote in the feed and see live results.
+        </p>
+        <Input
+          value={pollQuestion}
+          onChange={(e) => setPollQuestion(e.target.value)}
+          maxLength={200}
+          placeholder="What should we vote on?"
+          aria-label="Poll question"
+          className="mt-3 min-h-11"
+        />
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {pollChoices.map((choice, i) => (
+            <Input
+              key={i}
+              value={choice}
+              onChange={(e) =>
+                setPollChoices((list) => list.map((c, idx) => (idx === i ? e.target.value : c)))
+              }
+              maxLength={80}
+              placeholder={`Choice ${i + 1}${i > 1 ? " (optional)" : ""}`}
+              aria-label={`Poll choice ${i + 1}`}
+              className="min-h-11"
+            />
+          ))}
+        </div>
+        <Button className="mt-3 min-h-11" disabled={pollBusy} onClick={() => void createPoll()}>
+          {pollBusy ? "Publishing…" : "Publish poll"}
+        </Button>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <h2 className="font-display text-base font-semibold">Manage a member</h2>
+        <p className="text-sm text-muted-foreground">
+          Pause someone's posting for a while, ban them, or delete their account for good.
+        </p>
+        <div className="mt-3 flex gap-2">
+          <Input
+            value={userQuery}
+            onChange={(e) => setUserQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void searchUsers();
+              }
+            }}
+            placeholder="Search by name"
+            aria-label="Search members"
+            className="min-h-11"
+          />
+          <Button
+            variant="outline"
+            className="min-h-11"
+            disabled={searching}
+            onClick={() => void searchUsers()}
+          >
+            Search
+          </Button>
+        </div>
+        <ul className="mt-3 space-y-3">
+          {found.map((u) => {
+            const blocked =
+              u.post_block_until && new Date(u.post_block_until).getTime() > Date.now();
+            return (
+              <li key={u.id} className="rounded-xl border border-border p-3">
+                <div className="flex items-center gap-3">
+                  <UserAvatar path={u.avatar_url} name={u.full_name} className="size-10" />
+                  <div className="min-w-0">
+                    <Link to="/u/$id" params={{ id: u.id }} className="text-sm font-semibold hover:underline">
+                      {u.full_name}
+                    </Link>
+                    <p className="text-xs text-muted-foreground">
+                      {u.is_banned ? "Banned" : blocked ? `Posting paused until ${new Date(u.post_block_until!).toLocaleString()}` : "Active"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button variant="outline" className="min-h-11" onClick={() => void blockPosting(u.id, 1)}>
+                    Pause 1h
+                  </Button>
+                  <Button variant="outline" className="min-h-11" onClick={() => void blockPosting(u.id, 24)}>
+                    Pause 24h
+                  </Button>
+                  <Button variant="outline" className="min-h-11" onClick={() => void blockPosting(u.id, 168)}>
+                    Pause 7 days
+                  </Button>
+                  {blocked && (
+                    <Button variant="ghost" className="min-h-11" onClick={() => void blockPosting(u.id, 0)}>
+                      Allow posting
+                    </Button>
+                  )}
+                  <Button
+                    variant={u.is_banned ? "ghost" : "destructive"}
+                    className="min-h-11"
+                    onClick={() => void patchUser(u.id, { is_banned: !u.is_banned })}
+                  >
+                    {u.is_banned ? "Lift ban" : "Ban from app"}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="min-h-11"
+                    onClick={() => void removeAccount(u.id, u.full_name)}
+                  >
+                    <Trash2 className="mr-1 size-4" aria-hidden="true" />
+                    Delete account
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+
       {loading ? (
         <Loader2 className="mx-auto my-12 size-6 animate-spin text-muted-foreground" />
       ) : (
@@ -586,30 +702,59 @@ function AdminPage() {
             )}
             {reports.map((row) => (
               <div key={row.id} className="rounded-2xl border border-border bg-card p-4">
-                <p className="text-sm font-semibold capitalize">{row.target_type} reported</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold capitalize">{row.target_type} reported</p>
+                  <Badge
+                    variant={row.status === "pending" ? "secondary" : "outline"}
+                    className="capitalize"
+                  >
+                    {row.status === "approved" ? "actioned" : row.status}
+                  </Badge>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   by {people[row.reporter_id]?.full_name ?? "Student"} · {timeAgo(row.created_at)}
                 </p>
                 <p className="mt-2 text-sm">{row.reason}</p>
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    variant="destructive"
-                    className="min-h-11"
-                    onClick={() => void resolveReport(row, true)}
+                {row.target_type === "post" && (
+                  <Link
+                    to="/p/$id"
+                    params={{ id: row.target_id }}
+                    className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
                   >
-                    {row.target_type === "user" ? "Ban user" : "Remove content"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="min-h-11"
-                    onClick={() => void resolveReport(row, false)}
+                    Open the reported post
+                  </Link>
+                )}
+                {row.target_type === "user" && (
+                  <Link
+                    to="/u/$id"
+                    params={{ id: row.target_id }}
+                    className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
                   >
-                    Dismiss
-                  </Button>
-                </div>
+                    Open the reported profile
+                  </Link>
+                )}
+                {row.status === "pending" && (
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      variant="destructive"
+                      className="min-h-11"
+                      onClick={() => void resolveReport(row, true)}
+                    >
+                      {row.target_type === "user" ? "Ban user" : "Remove content"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="min-h-11"
+                      onClick={() => void resolveReport(row, false)}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
           </TabsContent>
+
         </Tabs>
       )}
     </div>
