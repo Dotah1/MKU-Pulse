@@ -14,6 +14,7 @@ import { fetchProfiles, type MiniProfile } from "@/lib/campus-data";
 export const Route = createFileRoute("/_authenticated/messages")({
   validateSearch: (search: Record<string, unknown>) => ({
     c: typeof search['c'] === "string" ? (search['c'] as string) : undefined,
+    p: typeof search['p'] === "string" ? (search['p'] as string) : undefined,
   }),
   head: () => ({
     meta: [
@@ -43,9 +44,46 @@ interface MessageRow {
   sender_id: string;
   content: string;
   reply_to_id: string | null;
+  post_id: string | null;
   read_at: string | null;
   created_at: string;
 }
+
+interface PostRef {
+  id: string;
+  content: string;
+  image_url: string | null;
+}
+
+/** Small preview of the post a message is about. */
+function PostRefCard({ post, tone }: { post: PostRef; tone: "mine" | "theirs" | "composer" }) {
+  return (
+    <Link
+      to="/p/$id"
+      params={{ id: post.id }}
+      className={`mb-1 flex items-center gap-2 rounded-lg border-l-4 px-2 py-1.5 text-xs ${
+        tone === "mine"
+          ? "border-primary-foreground/70 bg-primary-foreground/15 text-primary-foreground"
+          : "border-primary bg-primary/10 text-foreground"
+      }`}
+    >
+      {post.image_url && (
+        <StoredImage
+          path={post.image_url}
+          alt="Post picture"
+          className="size-9 shrink-0 rounded-md object-cover"
+        />
+      )}
+      <span className="min-w-0">
+        <span className="block font-semibold">About this post</span>
+        <span className="block truncate opacity-80">
+          {post.content || "Photo or video post"}
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 
 function MessagesPage() {
   const { user } = useCampus();
