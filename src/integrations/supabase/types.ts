@@ -221,6 +221,7 @@ export type Database = {
           conversation_id: string
           created_at: string
           id: string
+          post_id: string | null
           read_at: string | null
           reply_to_id: string | null
           sender_id: string
@@ -230,6 +231,7 @@ export type Database = {
           conversation_id: string
           created_at?: string
           id?: string
+          post_id?: string | null
           read_at?: string | null
           reply_to_id?: string | null
           sender_id: string
@@ -239,6 +241,7 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           id?: string
+          post_id?: string | null
           read_at?: string | null
           reply_to_id?: string | null
           sender_id?: string
@@ -249,6 +252,13 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
             referencedColumns: ["id"]
           },
           {
@@ -415,6 +425,7 @@ export type Database = {
           created_at: string
           created_by: string
           id: string
+          image_url: string | null
           is_active: boolean
           question: string
           updated_at: string
@@ -424,6 +435,7 @@ export type Database = {
           created_at?: string
           created_by: string
           id?: string
+          image_url?: string | null
           is_active?: boolean
           question: string
           updated_at?: string
@@ -433,6 +445,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           id?: string
+          image_url?: string | null
           is_active?: boolean
           question?: string
           updated_at?: string
