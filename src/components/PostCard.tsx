@@ -26,7 +26,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { timeAgo, sanitizeText } from "@/lib/campus";
+import { deletePostWithMedia } from "@/lib/media.functions";
 import { getOrCreateConversation, type MiniProfile } from "@/lib/campus-data";
+
 
 export interface PostRow {
   id: string;
@@ -170,20 +172,22 @@ export function PostCard({
     if (!user || mine) return;
     try {
       const id = await getOrCreateConversation(user.id, post.user_id);
-      void navigate({ to: "/messages", search: { c: id } });
+      void navigate({ to: "/messages", search: { c: id, p: post.id } });
     } catch {
       toast.error("Could not open that chat");
     }
   };
 
   const remove = async () => {
-    const { error } = await supabase.from("posts").delete().eq("id", post.id);
-    if (error) toast.error(error.message);
-    else {
+    try {
+      await deletePostWithMedia({ data: { postId: post.id } });
       toast.success("Post deleted");
       onDeleted(post.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete that post");
     }
   };
+
 
   const submitReport = async () => {
     if (!user) return;

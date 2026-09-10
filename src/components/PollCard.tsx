@@ -5,11 +5,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCampus } from "@/hooks/useCampus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StoredImage } from "@/components/StoredMedia";
+import { deletePollWithMedia } from "@/lib/media.functions";
 import { timeAgo } from "@/lib/campus";
 
 export interface PollRow {
   id: string;
   question: string;
+  image_url: string | null;
   is_active: boolean;
   closes_at: string | null;
   created_at: string;
@@ -21,6 +24,7 @@ export interface PollOptionRow {
   label: string;
   position: number;
 }
+
 
 export function PollCard({
   poll,
@@ -90,13 +94,15 @@ export function PollCard({
   };
 
   const removePoll = async () => {
-    const { error } = await supabase.from("polls").delete().eq("id", poll.id);
-    if (error) toast.error(error.message);
-    else {
+    try {
+      await deletePollWithMedia({ data: { pollId: poll.id } });
       toast.success("Poll removed");
       onDeleted?.(poll.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove that poll");
     }
   };
+
 
   return (
     <article className="rounded-2xl border border-primary/40 bg-primary/5 p-4">
@@ -118,6 +124,14 @@ export function PollCard({
         )}
       </div>
       <h2 className="mt-2 font-display text-base font-semibold">{poll.question}</h2>
+      {poll.image_url && (
+        <StoredImage
+          path={poll.image_url}
+          alt="Poll picture"
+          className="mt-3 max-h-80 w-full rounded-xl object-cover"
+        />
+      )}
+
 
       <ul className="mt-3 space-y-2">
         {options.map((o) => {
@@ -166,8 +180,9 @@ export async function fetchFeedPolls(): Promise<{
 }> {
   const { data: polls } = await supabase
     .from("polls")
-    .select("id, question, is_active, closes_at, created_at")
+    .select("id, question, image_url, is_active, closes_at, created_at")
     .order("created_at", { ascending: false })
+
     .limit(10);
   const list = (polls ?? []) as PollRow[];
   if (list.length === 0) return { polls: [], options: {} };

@@ -22,6 +22,7 @@ import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authen
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedPIdRouteImport } from './routes/_authenticated/p.$id'
 import { Route as AuthenticatedUIdRouteImport } from './routes/_authenticated/u.$id'
+import { Route as ApiPublicPurgeExpiredPostsRouteImport } from './routes/api/public/purge-expired-posts'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -88,6 +89,12 @@ const AuthenticatedUIdRoute = AuthenticatedUIdRouteImport.update({
   path: '/u/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicPurgeExpiredPostsRoute =
+  ApiPublicPurgeExpiredPostsRouteImport.update({
+    id: '/api/public/purge-expired-posts',
+    path: '/api/public/purge-expired-posts',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/p/$id': typeof AuthenticatedPIdRoute
   '/u/$id': typeof AuthenticatedUIdRoute
+  '/api/public/purge-expired-posts': typeof ApiPublicPurgeExpiredPostsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -116,6 +124,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/p/$id': typeof AuthenticatedPIdRoute
   '/u/$id': typeof AuthenticatedUIdRoute
+  '/api/public/purge-expired-posts': typeof ApiPublicPurgeExpiredPostsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -132,6 +141,7 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/p/$id': typeof AuthenticatedPIdRoute
   '/_authenticated/u/$id': typeof AuthenticatedUIdRoute
+  '/api/public/purge-expired-posts': typeof ApiPublicPurgeExpiredPostsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/p/$id'
     | '/u/$id'
+    | '/api/public/purge-expired-posts'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/p/$id'
     | '/u/$id'
+    | '/api/public/purge-expired-posts'
   id:
     | '__root__'
     | '/'
@@ -177,6 +189,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/p/$id'
     | '/_authenticated/u/$id'
+    | '/api/public/purge-expired-posts'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -184,6 +197,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiPublicPurgeExpiredPostsRoute: typeof ApiPublicPurgeExpiredPostsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -279,6 +293,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/purge-expired-posts': {
+      id: '/api/public/purge-expired-posts'
+      path: '/api/public/purge-expired-posts'
+      fullPath: '/api/public/purge-expired-posts'
+      preLoaderRoute: typeof ApiPublicPurgeExpiredPostsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -314,6 +335,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiPublicPurgeExpiredPostsRoute: ApiPublicPurgeExpiredPostsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
