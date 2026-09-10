@@ -5,11 +5,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCampus } from "@/hooks/useCampus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StoredImage } from "@/components/StoredMedia";
+import { deletePollWithMedia } from "@/lib/media.functions";
 import { timeAgo } from "@/lib/campus";
 
 export interface PollRow {
   id: string;
   question: string;
+  image_url: string | null;
   is_active: boolean;
   closes_at: string | null;
   created_at: string;
@@ -21,6 +24,7 @@ export interface PollOptionRow {
   label: string;
   position: number;
 }
+
 
 export function PollCard({
   poll,
