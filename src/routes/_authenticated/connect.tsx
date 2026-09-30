@@ -47,6 +47,14 @@ interface MatchRow {
 type SwipeAction = "like" | "pass" | "super_like";
 type ChangeableSwipeAction = "like" | "pass";
 type ConnectTab = "discover" | "matches" | "history";
+type SwipeDirection = "like" | "pass";
+
+interface DragState {
+  x: number;
+  y: number;
+  width: number;
+  axis: "undecided" | "horizontal" | "vertical";
+}
 
 interface SwipeRow {
   swipee_id: string;
@@ -69,7 +77,10 @@ function ConnectPage() {
   const [updatingSwipe, setUpdatingSwipe] = useState<string | null>(null);
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
-  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const [exitAction, setExitAction] = useState<SwipeDirection | null>(null);
+  const dragStart = useRef<DragState | null>(null);
+  const exitActionRef = useRef<SwipeDirection | null>(null);
+  const exitTimeout = useRef<number | null>(null);
   const suppressClick = useRef(false);
 
   const loadDeck = useCallback(async () => {
@@ -206,6 +217,38 @@ function ConnectPage() {
     await Promise.all([loadMatches(), loadHistory()]);
   };
 
+  const finishSwipeExit = () => {
+    const action = exitActionRef.current;
+    if (!action) return;
+    exitActionRef.current = null;
+    if (exitTimeout.current !== null) window.clearTimeout(exitTimeout.current);
+    exitTimeout.current = null;
+    setExitAction(null);
+    setDragX(0);
+    void swipe(action);
+  };
+
+  const animateSwipe = (action: SwipeDirection, cardWidth = 320) => {
+    if (!current || exitActionRef.current) return;
+    if (outOfSwipes) {
+      toast.error(`Daily swipe limit reached on the ${limits.label} plan`);
+      setDragX(0);
+      return;
+    }
+    exitActionRef.current = action;
+    setExitAction(action);
+    setDragging(false);
+    setDragX(
+      (action === "like" ? 1 : -1) * Math.max(window.innerWidth + cardWidth, cardWidth * 2.2),
+    );
+    suppressClick.current = true;
+    window.setTimeout(() => {
+      suppressClick.current = false;
+    }, 700);
+    // Fallback for reduced-motion settings or browsers that omit transitionend.
+    exitTimeout.current = window.setTimeout(finishSwipeExit, 400);
+  };
+
   const changeVote = async (row: SwipeRow, action: ChangeableSwipeAction) => {
     if (!user || updatingSwipe) return;
     setUpdatingSwipe(row.swipee_id);
@@ -262,8 +305,19 @@ function ConnectPage() {
   };
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
-    dragStart.current = { x: event.clientX, y: event.clientY };
+    if (
+      event.button !== 0 ||
+      exitActionRef.current ||
+      (event.target as HTMLElement).closest("button")
+    )
+      return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    dragStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      width: bounds.width,
+      axis: "undecided",
+    };
     setDragging(true);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -273,8 +327,19 @@ function ConnectPage() {
     if (!start) return;
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
-    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 16) return;
-    setDragX(dx);
+    if (start.axis === "undecided") {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+      start.axis = Math.abs(dx) > Math.abs(dy) * 1.15 ? "horizontal" : "vertical";
+    }
+    if (start.axis !== "horizontal") return;
+    event.preventDefault();
+    const resistanceStart = start.width * 0.55;
+    const magnitude = Math.abs(dx);
+    const resistedX =
+      magnitude > resistanceStart
+        ? Math.sign(dx) * (resistanceStart + (magnitude - resistanceStart) * 0.55)
+        : dx;
+    setDragX(resistedX);
   };
 
   const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -283,15 +348,23 @@ function ConnectPage() {
     const dx = event.clientX - start.x;
     dragStart.current = null;
     setDragging(false);
-    if (Math.abs(dx) >= 100) {
-      suppressClick.current = true;
-      void swipe(dx > 0 ? "like" : "pass");
-      window.setTimeout(() => {
-        suppressClick.current = false;
-      }, 500);
+    const threshold = Math.max(64, start.width * 0.23);
+    if (start.axis === "horizontal" && Math.abs(dx) >= threshold) {
+      animateSwipe(dx > 0 ? "like" : "pass", start.width);
+    } else {
+      setDragX(0);
     }
-    setDragX(0);
   };
+
+  const likeProgress = Math.min(1, Math.pow(Math.max(0, dragX) / 88, 0.78));
+  const passProgress = Math.min(1, Math.pow(Math.max(0, -dragX) / 88, 0.78));
+
+  useEffect(
+    () => () => {
+      if (exitTimeout.current !== null) window.clearTimeout(exitTimeout.current);
+    },
+    [],
+  );
 
   const outOfSuperLikes = superToday >= limits.superLikesPerDay;
 
@@ -323,7 +396,7 @@ function ConnectPage() {
 
         <TabsContent value="discover" className="mt-5">
           <section>
-            <div className="flex justify-center">
+            <div className="flex justify-center overflow-x-hidden">
               {loading ? (
                 <Loader2 className="my-16 size-6 animate-spin text-muted-foreground" />
               ) : !current ? (
@@ -332,12 +405,16 @@ function ConnectPage() {
                 </p>
               ) : (
                 <div
-                  className="relative w-full max-w-sm touch-pan-y select-none overflow-hidden rounded-3xl border border-border bg-card shadow-sm"
+                  className={`relative w-full max-w-sm cursor-grab touch-pan-y select-none overflow-hidden rounded-3xl border border-border bg-card shadow-sm motion-reduce:duration-0 ${
+                    dragging
+                      ? "cursor-grabbing transition-none"
+                      : "transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+                  }`}
                   style={{
-                    transform: `translateX(${dragX}px) rotate(${Math.max(-14, Math.min(14, dragX / 18))}deg)`,
-                    transition: dragging ? "none" : "transform 180ms ease-out",
+                    transform: `translate3d(${dragX}px, 0, 0) rotate(${Math.max(-16, Math.min(16, dragX * 0.055))}deg) scale(${dragging ? 1.012 : 1})`,
                     touchAction: "pan-y",
                   }}
+                  aria-hidden={exitAction !== null}
                   onPointerDown={onPointerDown}
                   onPointerMove={onPointerMove}
                   onPointerUp={onPointerUp}
@@ -345,6 +422,14 @@ function ConnectPage() {
                     dragStart.current = null;
                     setDragging(false);
                     setDragX(0);
+                  }}
+                  onTransitionEnd={(event) => {
+                    if (
+                      event.target === event.currentTarget &&
+                      event.propertyName === "transform"
+                    ) {
+                      finishSwipeExit();
+                    }
                   }}
                   onClickCapture={(event) => {
                     if (suppressClick.current) {
@@ -354,22 +439,26 @@ function ConnectPage() {
                     }
                   }}
                 >
-                  {dragX > 12 && (
-                    <span
-                      className="pointer-events-none absolute left-5 top-5 z-10 rotate-[-12deg] rounded-lg border-2 border-emerald-500 bg-emerald-500/90 px-3 py-1 text-lg font-black tracking-widest text-white shadow-lg"
-                      style={{ opacity: Math.min(1, dragX / 90) }}
-                    >
-                      LIKE
-                    </span>
-                  )}
-                  {dragX < -12 && (
-                    <span
-                      className="pointer-events-none absolute right-5 top-5 z-10 rotate-[12deg] rounded-lg border-2 border-red-500 bg-red-500/90 px-3 py-1 text-lg font-black tracking-widest text-white shadow-lg"
-                      style={{ opacity: Math.min(1, Math.abs(dragX) / 90) }}
-                    >
-                      PASS
-                    </span>
-                  )}
+                  <span
+                    className="pointer-events-none absolute left-5 top-5 z-10 rounded-lg border-[3px] border-emerald-500 bg-emerald-500/90 px-3 py-1.5 text-lg font-black tracking-[0.18em] text-white shadow-lg transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none"
+                    style={{
+                      opacity: likeProgress,
+                      transform: `rotate(-12deg) scale(${0.78 + likeProgress * 0.24})`,
+                    }}
+                    aria-hidden="true"
+                  >
+                    LIKE
+                  </span>
+                  <span
+                    className="pointer-events-none absolute right-5 top-5 z-10 rounded-lg border-[3px] border-red-500 bg-red-500/90 px-3 py-1.5 text-lg font-black tracking-[0.18em] text-white shadow-lg transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none"
+                    style={{
+                      opacity: passProgress,
+                      transform: `rotate(12deg) scale(${0.78 + passProgress * 0.24})`,
+                    }}
+                    aria-hidden="true"
+                  >
+                    PASS
+                  </span>
                   <Link
                     to="/u/$id"
                     params={{ id: current.id }}
@@ -412,7 +501,8 @@ function ConnectPage() {
                         size="lg"
                         className="size-14 rounded-full p-0"
                         aria-label="Pass"
-                        onClick={() => void swipe("pass")}
+                        onClick={() => animateSwipe("pass")}
+                        disabled={exitAction !== null}
                       >
                         <X className="size-6" aria-hidden="true" />
                       </Button>
@@ -423,7 +513,7 @@ function ConnectPage() {
                           className="size-14 rounded-full border-accent p-0 text-accent"
                           aria-label="Super like"
                           onClick={() => void swipe("super_like")}
-                          disabled={outOfSuperLikes}
+                          disabled={outOfSuperLikes || exitAction !== null}
                         >
                           <Star className="size-6" aria-hidden="true" />
                         </Button>
@@ -432,7 +522,8 @@ function ConnectPage() {
                         size="lg"
                         className="size-16 rounded-full p-0"
                         aria-label="Like"
-                        onClick={() => void swipe("like")}
+                        onClick={() => animateSwipe("like")}
+                        disabled={exitAction !== null}
                       >
                         <Heart className="size-7" aria-hidden="true" />
                       </Button>
@@ -496,7 +587,7 @@ function ConnectPage() {
                 Profiles you pass or like will appear here.
               </p>
             ) : (
-              <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {swipeHistory.map((row) => {
                   const person = historyProfiles[row.swipee_id];
                   const status =
@@ -506,8 +597,17 @@ function ConnectPage() {
                         ? "Liked"
                         : "Passed";
                   const nextAction: ChangeableSwipeAction = row.action === "pass" ? "like" : "pass";
+                  const statusColor =
+                    row.action === "pass"
+                      ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300"
+                      : row.action === "super_like"
+                        ? "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300";
                   return (
-                    <li key={row.swipee_id} className="flex items-center gap-3 p-3 sm:p-4">
+                    <li
+                      key={row.swipee_id}
+                      className="flex min-w-0 items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/20 sm:p-4"
+                    >
                       <Link to="/u/$id" params={{ id: row.swipee_id }} className="shrink-0">
                         <UserAvatar
                           path={person?.avatar_url}
@@ -526,15 +626,15 @@ function ConnectPage() {
                           {person?.year_of_study ? ` · Year ${person.year_of_study}` : ""}
                         </p>
                       </div>
-                      <Badge
-                        variant="secondary"
-                        className={
-                          row.action === "pass"
-                            ? "text-muted-foreground"
-                            : "bg-primary/10 text-primary"
-                        }
-                      >
-                        {status}
+                      <Badge variant="outline" className={`shrink-0 gap-1.5 ${statusColor}`}>
+                        {row.action === "pass" ? (
+                          <X className="size-3" aria-hidden="true" />
+                        ) : row.action === "super_like" ? (
+                          <Star className="size-3" aria-hidden="true" />
+                        ) : (
+                          <Heart className="size-3" aria-hidden="true" />
+                        )}
+                        <span>{status}</span>
                       </Badge>
                       <Button
                         variant="outline"

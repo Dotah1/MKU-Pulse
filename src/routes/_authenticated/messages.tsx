@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Reply, Send, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, FileText, Link2, Loader2, Reply, Send, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notify } from "@/lib/notify";
 import { useCampus } from "@/hooks/useCampus";
@@ -65,27 +65,42 @@ function PostRefCard({
   tone: "mine" | "theirs" | "composer";
   label?: string;
 }) {
+  const toneClass =
+    tone === "mine"
+      ? "border-white/20 bg-white/10 text-primary-foreground hover:bg-white/15"
+      : "border-border bg-card text-foreground hover:border-primary/50 hover:bg-primary/5";
+  const snippet = post.content.trim() || "Photo or video post";
+
   return (
     <Link
       to="/p/$id"
       params={{ id: post.id }}
-      className={`mb-1 flex items-center gap-2 rounded-lg border-l-4 px-2 py-1.5 text-xs ${
-        tone === "mine"
-          ? "border-primary-foreground/70 bg-primary-foreground/15 text-primary-foreground"
-          : "border-primary bg-primary/10 text-foreground"
-      }`}
+      aria-label={`${label}: ${snippet}`}
+      className={`group/post-card mb-1 grid grid-cols-[3.5rem_minmax(0,1fr)_1rem] items-center gap-3 rounded-xl border p-2 text-left shadow-sm transition-colors ${toneClass}`}
     >
-      {post.image_url && (
+      {post.image_url ? (
         <StoredImage
           path={post.image_url}
-          alt="Post picture"
-          className="size-9 shrink-0 rounded-md object-cover"
+          alt=""
+          className="size-14 rounded-lg object-cover ring-1 ring-black/5"
         />
+      ) : (
+        <span className="flex size-14 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <FileText className="size-5" aria-hidden="true" />
+        </span>
       )}
-      <span className="min-w-0">
-        <span className="block font-semibold">{label}</span>
-        <span className="block truncate opacity-80">{post.content || "Photo or video post"}</span>
+      <span className="min-w-0 py-0.5">
+        <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] opacity-65">
+          {label}
+        </span>
+        <span className="line-clamp-2 block text-xs font-medium leading-snug opacity-90">
+          {snippet}
+        </span>
       </span>
+      <ArrowUpRight
+        className="size-4 self-center text-current opacity-60 transition-transform group-hover/post-card:-translate-y-0.5 group-hover/post-card:translate-x-0.5"
+        aria-hidden="true"
+      />
     </Link>
   );
 }
@@ -528,10 +543,13 @@ function ChatPane({
       )}
 
       {postDraft && (
-        <div className="flex items-start gap-2 border-t border-border bg-secondary/40 px-3 py-2 text-xs">
+        <div className="flex items-center gap-3 border-t border-border bg-muted/50 px-3 py-2.5">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Link2 className="size-4" aria-hidden="true" />
+          </span>
           <div className="min-w-0 flex-1">
-            <p className="mb-1 font-semibold text-foreground">Replying to post</p>
-            <PostRefCard post={postDraft} tone="composer" label="Tap to open post" />
+            <p className="mb-1 text-xs font-semibold text-foreground">Replying to post</p>
+            <PostRefCard post={postDraft} tone="composer" label="Attached post" />
           </div>
           <button
             type="button"
@@ -539,10 +557,12 @@ function ChatPane({
               setPostDraft(null);
               onDismissPost();
             }}
-            aria-label="Dismiss post preview"
-            className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            aria-label="Clear attached post"
+            title="Clear attached post"
+            className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="size-4" aria-hidden="true" />
+            <span>Clear</span>
           </button>
         </div>
       )}
