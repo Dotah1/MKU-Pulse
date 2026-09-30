@@ -32,7 +32,7 @@ export function useNotifications(limit = 30) {
       .limit(limit);
     setItems((data ?? []) as AppNotification[]);
     setLoading(false);
-  }, [user?.id, limit]);
+  }, [user, limit]);
 
   useEffect(() => {
     void load();
@@ -56,17 +56,14 @@ export function useNotifications(limit = 30) {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [user?.id, load]);
+  }, [user, load]);
 
-  const markRead = useCallback(
-    async (id: string) => {
-      setItems((list) =>
-        list.map((n) => (n.id === id ? { ...n, read_at: n.read_at ?? new Date().toISOString() } : n)),
-      );
-      await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", id);
-    },
-    [],
-  );
+  const markRead = useCallback(async (id: string) => {
+    setItems((list) =>
+      list.map((n) => (n.id === id ? { ...n, read_at: n.read_at ?? new Date().toISOString() } : n)),
+    );
+    await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", id);
+  }, []);
 
   const markAllRead = useCallback(async () => {
     if (!user) return;
@@ -77,7 +74,7 @@ export function useNotifications(limit = 30) {
       .update({ read_at: now })
       .eq("user_id", user.id)
       .is("read_at", null);
-  }, [user?.id]);
+  }, [user]);
 
   return {
     items,

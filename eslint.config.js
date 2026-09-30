@@ -36,5 +36,19 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    files: [
+      "src/components/PollCard.tsx",
+      "src/components/PostCard.tsx",
+      "src/components/StoredMedia.tsx",
+      "src/components/ui/**/*.tsx",
+      "src/hooks/useCampus.tsx",
+    ],
+    rules: {
+      // These modules intentionally co-locate reusable hooks or variants with components.
+      // Fast Refresh may fall back to a full reload, but this does not affect production behavior.
+      "react-refresh/only-export-components": "off",
+    },
+  },
   eslintPluginPrettier,
 );

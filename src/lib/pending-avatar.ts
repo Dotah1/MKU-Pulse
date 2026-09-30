@@ -32,8 +32,10 @@ async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => I
 export async function savePendingAvatar(file: File): Promise<void> {
   if (typeof indexedDB === "undefined") return;
   try {
-    await tx("readwrite", (s) =>
-      s.put({ blob: file, name: file.name, type: file.type }, KEY) as IDBRequest<IDBValidKey>,
+    await tx(
+      "readwrite",
+      (s) =>
+        s.put({ blob: file, name: file.name, type: file.type }, KEY) as IDBRequest<IDBValidKey>,
     );
   } catch {
     /* storing the photo locally is best-effort */

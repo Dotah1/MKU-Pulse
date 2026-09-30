@@ -5,22 +5,13 @@ import { Image as ImageIcon, Loader2, Video, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCampus } from "@/hooks/useCampus";
 import { PostCard, usePostAuthors, type PostRow } from "@/components/PostCard";
-import {
-  PollCard,
-  fetchFeedPolls,
-  type PollOptionRow,
-  type PollRow,
-} from "@/components/PollCard";
+import { PollCard, fetchFeedPolls, type PollOptionRow, type PollRow } from "@/components/PollCard";
 import { UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import {
-  POST_MEDIA_MAX_BYTES,
-  POST_VIDEO_MAX_SECONDS,
-  sanitizeText,
-} from "@/lib/campus";
+import { POST_MEDIA_MAX_BYTES, POST_VIDEO_MAX_SECONDS, sanitizeText } from "@/lib/campus";
 import { uploadFile, videoDuration } from "@/lib/storage";
 import { countToday } from "@/lib/campus-data";
 
@@ -30,7 +21,8 @@ export const Route = createFileRoute("/_authenticated/feed")({
       { title: "Campus feed — MKU Pulse" },
       {
         name: "description",
-        content: "See what your campus is posting: updates, photos, clips, polls and announcements.",
+        content:
+          "See what your campus is posting: updates, photos, clips, polls and announcements.",
       },
       { property: "og:title", content: "Campus feed — MKU Pulse" },
       { property: "og:description", content: "The live campus feed on MKU Pulse." },
@@ -74,7 +66,7 @@ function FeedPage() {
   useEffect(() => {
     if (!user) return;
     void countToday("posts", "user_id", user.id).then(setUsedToday);
-  }, [user?.id, posts.length]);
+  }, [user, posts.length]);
 
   const blockedUntil = profile?.post_block_until ?? null;
   const blocked = blockedUntil ? new Date(blockedUntil).getTime() > Date.now() : false;
@@ -144,13 +136,7 @@ function FeedPage() {
   );
 }
 
-function Composer({
-  onPosted,
-  usedToday,
-}: {
-  onPosted: () => void;
-  usedToday: number;
-}) {
+function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: number }) {
   const { user, profile, isAdmin, limits } = useCampus();
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);

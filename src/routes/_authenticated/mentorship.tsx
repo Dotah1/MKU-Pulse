@@ -74,7 +74,7 @@ function MentorshipPage() {
       setApplication((app as ApplicationRow | null) ?? null);
     }
     setLoading(false);
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
     void load();
@@ -123,9 +123,7 @@ function MentorshipPage() {
     <div className="space-y-8">
       <header>
         <h1 className="font-display text-2xl font-bold">Mentorship</h1>
-        <p className="text-sm text-muted-foreground">
-          Free for every student, on every plan.
-        </p>
+        <p className="text-sm text-muted-foreground">Free for every student, on every plan.</p>
       </header>
 
       <div>
@@ -341,7 +339,7 @@ function IncomingRequests() {
     setRows(list);
     setPeople(await fetchProfiles(list.map((r) => r.student_id)));
     setLoading(false);
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
     void load();
@@ -353,14 +351,19 @@ function IncomingRequests() {
       .channel(`mentor-requests-${user.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "mentor_sessions", filter: `mentor_id=eq.${user.id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "mentor_sessions",
+          filter: `mentor_id=eq.${user.id}`,
+        },
         () => void load(),
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [user?.id, load]);
+  }, [user, load]);
 
   const openChat = async (row: SessionRequestRow) => {
     if (!user) return;
@@ -419,9 +422,7 @@ function IncomingRequests() {
               >
                 <UserAvatar path={p?.avatar_url} name={p?.full_name ?? "Student"} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold">
-                    {p?.full_name ?? "Student"}
-                  </span>
+                  <span className="block truncate font-semibold">{p?.full_name ?? "Student"}</span>
                   <span className="block truncate text-sm text-muted-foreground">{r.topic}</span>
                   {g.count > 1 && (
                     <span className="block text-xs text-muted-foreground">

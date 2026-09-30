@@ -1,4 +1,8 @@
-import { getFirebaseWebConfig, registerDeviceToken, unregisterDeviceToken } from "@/lib/notifications.functions";
+import {
+  getFirebaseWebConfig,
+  registerDeviceToken,
+  unregisterDeviceToken,
+} from "@/lib/notifications.functions";
 
 /**
  * Browser/APK push wiring for Firebase Cloud Messaging.
@@ -22,10 +26,12 @@ function readNativeToken(): string | null {
     AndroidBridge?: NativeBridge;
   };
   const candidates = [
-    typeof w['fcmToken'] === "string" ? (w['fcmToken'] as string) : null,
-    typeof w['FCM_TOKEN'] === "string" ? (w['FCM_TOKEN'] as string) : null,
-    w.WebToApk?.fcmToken ?? (typeof w.WebToApk?.getFcmToken === "function" ? w.WebToApk.getFcmToken() : null),
-    w.Android?.fcmToken ?? (typeof w.Android?.getFcmToken === "function" ? w.Android.getFcmToken() : null),
+    typeof w["fcmToken"] === "string" ? (w["fcmToken"] as string) : null,
+    typeof w["FCM_TOKEN"] === "string" ? (w["FCM_TOKEN"] as string) : null,
+    w.WebToApk?.fcmToken ??
+      (typeof w.WebToApk?.getFcmToken === "function" ? w.WebToApk.getFcmToken() : null),
+    w.Android?.fcmToken ??
+      (typeof w.Android?.getFcmToken === "function" ? w.Android.getFcmToken() : null),
     w.AndroidBridge?.fcmToken ??
       (typeof w.AndroidBridge?.getFcmToken === "function" ? w.AndroidBridge.getFcmToken() : null),
   ];
@@ -106,9 +112,9 @@ export async function enablePush(
     onMessage(messaging, (payload) => {
       const data = payload.data ?? {};
       onForeground({
-        title: payload.notification?.title ?? data['title'] ?? "MKU Pulse",
-        body: payload.notification?.body ?? data['body'] ?? "",
-        url: data['url'] ?? "/notifications",
+        title: payload.notification?.title ?? data["title"] ?? "MKU Pulse",
+        body: payload.notification?.body ?? data["body"] ?? "",
+        url: data["url"] ?? "/notifications",
       });
     });
   }

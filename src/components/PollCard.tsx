@@ -25,7 +25,6 @@ export interface PollOptionRow {
   position: number;
 }
 
-
 export function PollCard({
   poll,
   options,
@@ -103,7 +102,6 @@ export function PollCard({
     }
   };
 
-
   return (
     <article className="rounded-2xl border border-primary/40 bg-primary/5 p-4">
       <div className="flex items-center gap-2">
@@ -131,7 +129,6 @@ export function PollCard({
           className="mt-3 max-h-80 w-full rounded-xl object-cover"
         />
       )}
-
 
       <ul className="mt-3 space-y-2">
         {options.map((o) => {

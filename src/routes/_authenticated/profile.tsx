@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Loader2, LogOut, Upload } from "lucide-react";
@@ -39,7 +39,8 @@ export const Route = createFileRoute("/_authenticated/profile")({
       { title: "Your profile & plan — MKU Pulse" },
       {
         name: "description",
-        content: "Update your campus profile, manage notifications and upgrade your plan via M-Pesa.",
+        content:
+          "Update your campus profile, manage notifications and upgrade your plan via M-Pesa.",
       },
       { property: "og:title", content: "Your profile & plan — MKU Pulse" },
       { property: "og:description", content: "Manage your MKU Pulse profile and plan." },
@@ -47,7 +48,6 @@ export const Route = createFileRoute("/_authenticated/profile")({
   }),
   component: ProfilePage,
 });
-
 
 function ProfilePage() {
   const { profile, user, tier, limits, freeAccessMode, refreshProfile, signOut } = useCampus();
@@ -67,11 +67,12 @@ function ProfilePage() {
     const value = sanitizeText(ownInterest, 30).trim();
     if (!value) return;
     setInterests((list) =>
-      list.some((x) => x.toLowerCase() === value.toLowerCase()) ? list : [...list, value].slice(0, 10),
+      list.some((x) => x.toLowerCase() === value.toLowerCase())
+        ? list
+        : [...list, value].slice(0, 10),
     );
     setOwnInterest("");
   };
-
 
   useEffect(() => {
     if (!profile) return;
@@ -81,7 +82,7 @@ function ProfilePage() {
     setGender(profile.gender ?? "");
     setBio(profile.bio);
     setInterests(profile.interests ?? []);
-  }, [profile?.id]);
+  }, [profile]);
 
   // Contact details live in a private table only the owner (and admin) can read.
   useEffect(() => {
@@ -98,7 +99,7 @@ function ProfilePage() {
     return () => {
       active = false;
     };
-  }, [user?.id]);
+  }, [user]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,7 +138,6 @@ function ProfilePage() {
     }
   };
 
-
   const changeAvatar = async (file: File | null) => {
     if (!file || !user) return;
     if (!file.type.startsWith("image/")) {
@@ -165,8 +165,7 @@ function ProfilePage() {
 
   const toggleFlag = async (key: "notifications_enabled" | "is_private", value: boolean) => {
     if (!user) return;
-    const patch =
-      key === "is_private" ? { is_private: value } : { notifications_enabled: value };
+    const patch = key === "is_private" ? { is_private: value } : { notifications_enabled: value };
     const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
     if (error) {
       toast.error(error.message);
@@ -175,7 +174,8 @@ function ProfilePage() {
     if (key === "notifications_enabled") {
       if (value) {
         const token = await enablePush();
-        if (!token) toast.error("Allow notifications in your browser or app settings to get pushes");
+        if (!token)
+          toast.error("Allow notifications in your browser or app settings to get pushes");
       } else {
         await disablePush();
       }
@@ -213,7 +213,9 @@ function ProfilePage() {
           />
         </div>
         <div>
-          <h1 className="font-display text-2xl font-bold">{profile?.full_name || "Your profile"}</h1>
+          <h1 className="font-display text-2xl font-bold">
+            {profile?.full_name || "Your profile"}
+          </h1>
           <p className="text-sm text-muted-foreground">{user?.email}</p>
           <Badge variant="outline" className="mt-1 capitalize">
             {limits.label} plan
@@ -411,7 +413,7 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
   const [payer, setPayer] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
       .from("payment_requests")
@@ -419,11 +421,11 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     setRequests((data ?? []) as PaymentRow[]);
-  };
+  }, [user]);
 
   useEffect(() => {
     void load();
-  }, [user?.id]);
+  }, [load]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -494,8 +496,8 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
 
       <form onSubmit={submit} className="space-y-3 rounded-xl bg-secondary/60 p-4">
         <p className="text-sm">
-          Send your payment to <span className="font-semibold">{paymentInfo.number}</span> via M-Pesa,
-          then paste the transaction code below for manual approval.
+          Send your payment to <span className="font-semibold">{paymentInfo.number}</span> via
+          M-Pesa, then paste the transaction code below for manual approval.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
           <div>

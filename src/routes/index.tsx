@@ -22,10 +22,26 @@ export const Route = createFileRoute("/")({
 });
 
 const FEATURES = [
-  { icon: Users, title: "Campus feed", body: "Share text, photos and short clips with your campus." },
-  { icon: Heart, title: "Connect", body: "Swipe through real student profiles and match instantly." },
-  { icon: GraduationCap, title: "Mentorship", body: "Free for everyone — find and book campus mentors." },
-  { icon: MessageCircle, title: "Real-time chat", body: "Typing indicators, read receipts and push alerts." },
+  {
+    icon: Users,
+    title: "Campus feed",
+    body: "Share text, photos and short clips with your campus.",
+  },
+  {
+    icon: Heart,
+    title: "Connect",
+    body: "Swipe through real student profiles and match instantly.",
+  },
+  {
+    icon: GraduationCap,
+    title: "Mentorship",
+    body: "Free for everyone — find and book campus mentors.",
+  },
+  {
+    icon: MessageCircle,
+    title: "Real-time chat",
+    body: "Typing indicators, read receipts and push alerts.",
+  },
 ];
 
 function Landing() {
@@ -36,7 +52,9 @@ function Landing() {
           MKU<span className="text-primary">Pulse</span>
         </span>
         <Button asChild variant="ghost" className="min-h-11">
-          <Link to="/auth" search={{ mode: "signin" }}>Sign in</Link>
+          <Link to="/auth" search={{ mode: "signin" }}>
+            Sign in
+          </Link>
         </Button>
       </header>
 
@@ -48,8 +66,8 @@ function Landing() {
           Your whole campus life, in one app.
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-base text-muted-foreground sm:text-lg">
-          A social feed, student matching, free mentorship and real-time messaging — all in
-          MKU Pulse.
+          A social feed, student matching, free mentorship and real-time messaging — all in MKU
+          Pulse.
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <Button asChild size="lg" className="min-h-12 px-8">
@@ -58,7 +76,9 @@ function Landing() {
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline" className="min-h-12 px-8">
-            <Link to="/auth" search={{ mode: "signin" }}>I already have one</Link>
+            <Link to="/auth" search={{ mode: "signin" }}>
+              I already have one
+            </Link>
           </Button>
         </div>
       </section>

@@ -13,11 +13,11 @@ export interface FirebaseWebConfig {
 /** Publishable Firebase web config (safe for the browser), sourced from project secrets. */
 export const getFirebaseWebConfig = createServerFn({ method: "GET" }).handler(
   async (): Promise<FirebaseWebConfig> => {
-    const apiKey = process.env['FIREBASE_API_KEY'] ?? "";
-    const projectId = process.env['FIREBASE_PROJECT_ID'] ?? "";
-    const messagingSenderId = process.env['FIREBASE_MESSAGING_SENDER_ID'] ?? "";
-    const appId = process.env['FIREBASE_APP_ID'] ?? "";
-    const vapidKey = process.env['FIREBASE_VAPID_KEY'] ?? "";
+    const apiKey = process.env["FIREBASE_API_KEY"] ?? "";
+    const projectId = process.env["FIREBASE_PROJECT_ID"] ?? "";
+    const messagingSenderId = process.env["FIREBASE_MESSAGING_SENDER_ID"] ?? "";
+    const appId = process.env["FIREBASE_APP_ID"] ?? "";
+    const vapidKey = process.env["FIREBASE_VAPID_KEY"] ?? "";
     return {
       apiKey,
       projectId,

@@ -85,8 +85,7 @@ export function passwordProblem(pw: string): string | null {
   if (pw.length < 8) return "At least 8 characters";
   if (!/[A-Z]/.test(pw)) return "Add one uppercase letter";
   if (!/\d/.test(pw)) return "Add one number";
-  if (!/[!@#$%^&*(),.?":{}|<>_\-[\]\\/'`~+=;]/.test(pw))
-    return "Add one special character";
+  if (!/[!@#$%^&*(),.?":{}|<>_\-[\]\\/'`~+=;]/.test(pw)) return "Add one special character";
   return null;
 }
 
@@ -102,9 +101,7 @@ export function effectiveTier(
   // Free Access Mode lifts free members to the Mid plan; anyone who paid keeps
   // the plan they bought.
   const paid =
-    profile && profile.tier !== "free" && !isExpired(profile.tier_expires_at)
-      ? profile.tier
-      : null;
+    profile && profile.tier !== "free" && !isExpired(profile.tier_expires_at) ? profile.tier : null;
   if (paid) return paid;
   if (freeAccessMode) return "mid";
   return "free";
@@ -126,7 +123,10 @@ export function timeAgo(iso: string): string {
 }
 
 export function sanitizeText(input: string, max: number): string {
-  return input.replace(/<[^>]*>/g, "").slice(0, max).trimEnd();
+  return input
+    .replace(/<[^>]*>/g, "")
+    .slice(0, max)
+    .trimEnd();
 }
 
 export function pairKey(a: string, b: string): [string, string] {

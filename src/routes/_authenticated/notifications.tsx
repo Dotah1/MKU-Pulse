@@ -62,8 +62,12 @@ function NotificationsPage() {
               >
                 <div className="flex items-center gap-2">
                   <p className="font-medium">{n.title}</p>
-                  {!n.read_at && <span className="size-2 rounded-full bg-primary" aria-hidden="true" />}
-                  <span className="ml-auto text-xs text-muted-foreground">{timeAgo(n.created_at)}</span>
+                  {!n.read_at && (
+                    <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
+                  )}
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {timeAgo(n.created_at)}
+                  </span>
                 </div>
                 {n.body && <p className="mt-1 text-sm text-muted-foreground">{n.body}</p>}
               </Link>

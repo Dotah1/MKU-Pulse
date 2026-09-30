@@ -16,8 +16,7 @@ export const Route = createFileRoute("/api/public/purge-expired-posts")({
           .select("value")
           .eq("key", "post_purge_token")
           .maybeSingle();
-        const expected =
-          (setting?.value as { token?: string } | null)?.token ?? "";
+        const expected = (setting?.value as { token?: string } | null)?.token ?? "";
         if (!expected || token.length !== expected.length || token !== expected) {
           return new Response("Unauthorized", { status: 401 });
         }

@@ -29,7 +29,6 @@ import { timeAgo, sanitizeText } from "@/lib/campus";
 import { deletePostWithMedia } from "@/lib/media.functions";
 import { getOrCreateConversation, type MiniProfile } from "@/lib/campus-data";
 
-
 export interface PostRow {
   id: string;
   user_id: string;
@@ -188,7 +187,6 @@ export function PostCard({
     }
   };
 
-
   const submitReport = async () => {
     if (!user) return;
     const reason = sanitizeText(reportReason, 500);
@@ -311,7 +309,9 @@ export function PostCard({
               variant="ghost"
               size="sm"
               className={`min-h-11 ${reported ? "text-destructive" : "text-muted-foreground"}`}
-              onClick={() => (reported ? toast("You already reported this post") : setReportOpen(true))}
+              onClick={() =>
+                reported ? toast("You already reported this post") : setReportOpen(true)
+              }
               aria-label={reported ? "Post reported" : "Report post"}
             >
               <Flag
@@ -375,11 +375,7 @@ export function PostCard({
           {replyTo && (
             <p className="flex items-center gap-2 text-xs text-muted-foreground">
               Replying to {commentAuthors[replyTo.user_id]?.full_name ?? "Student"}
-              <button
-                type="button"
-                className="underline"
-                onClick={() => setReplyTo(null)}
-              >
+              <button type="button" className="underline" onClick={() => setReplyTo(null)}>
                 cancel
               </button>
             </p>
@@ -417,6 +413,6 @@ export function usePostAuthors(posts: PostRow[]) {
     return () => {
       active = false;
     };
-  }, [ids.join(",")]);
+  }, [ids]);
   return authors;
 }

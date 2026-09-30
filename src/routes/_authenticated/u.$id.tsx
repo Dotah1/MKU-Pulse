@@ -60,7 +60,9 @@ function PublicProfilePage() {
       const [{ data: p }, { data: mentor }, { data: postRows }] = await Promise.all([
         supabase
           .from("profiles")
-          .select("id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_private")
+          .select(
+            "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_private",
+          )
           .eq("id", id)
           .maybeSingle(),
         supabase.from("mentors").select("user_id").eq("user_id", id).maybeSingle(),
@@ -107,7 +109,11 @@ function PublicProfilePage() {
         <p className="text-sm text-muted-foreground">
           This student may have left campus or set their profile to private.
         </p>
-        <Button variant="outline" className="min-h-11" onClick={() => void navigate({ to: "/feed" })}>
+        <Button
+          variant="outline"
+          className="min-h-11"
+          onClick={() => void navigate({ to: "/feed" })}
+        >
           Back to feed
         </Button>
       </div>
@@ -134,7 +140,6 @@ function PublicProfilePage() {
               alt={profile.full_name}
               className="size-28 rounded-full object-cover"
             />
-
           ) : (
             <UserAvatar path={null} name={profile.full_name} className="size-28" />
           )}

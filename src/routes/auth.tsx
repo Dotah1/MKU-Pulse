@@ -28,7 +28,7 @@ import { savePendingAvatar, uploadPendingAvatar } from "@/lib/pending-avatar";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>) => ({
-    mode: search['mode'] === "signup" ? ("signup" as const) : ("signin" as const),
+    mode: search["mode"] === "signup" ? ("signup" as const) : ("signin" as const),
   }),
   head: () => ({
     meta: [
@@ -64,9 +64,7 @@ function AuthPage() {
             : "Sign in with your Gmail address and password."}
         </p>
 
-        <div className="mt-5">
-          {isSignup ? <SignupForm /> : <SigninForm />}
-        </div>
+        <div className="mt-5">{isSignup ? <SignupForm /> : <SigninForm />}</div>
 
         <p className="mt-5 text-center text-sm text-muted-foreground">
           {isSignup ? "Already have an account?" : "New to MKU Pulse?"}{" "}
@@ -186,12 +184,9 @@ function SignupForm() {
   const [photo, setPhoto] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const emailError = email && !GMAIL_RE.test(email.trim().toLowerCase())
-    ? "Must be a @gmail.com address"
-    : null;
-  const phoneError = phone && !PHONE_RE.test(phone.trim())
-    ? "Use the format +254XXXXXXXXX"
-    : null;
+  const emailError =
+    email && !GMAIL_RE.test(email.trim().toLowerCase()) ? "Must be a @gmail.com address" : null;
+  const phoneError = phone && !PHONE_RE.test(phone.trim()) ? "Use the format +254XXXXXXXXX" : null;
   const pwError = password ? passwordProblem(password) : null;
 
   const pickPhoto = (file: File | null) => {
@@ -287,7 +282,6 @@ function SignupForm() {
     toast.success("Welcome to MKU Pulse!");
     void navigate({ to: "/feed" });
   };
-
 
   return (
     <form onSubmit={submit} className="space-y-4">

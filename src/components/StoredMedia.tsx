@@ -70,7 +70,6 @@ export function StoredImage({
   return <img src={url} alt={alt} loading="lazy" className={className} />;
 }
 
-
 export function StoredVideo({
   path,
   className,
@@ -104,4 +103,3 @@ export function StoredVideo({
     />
   );
 }
-

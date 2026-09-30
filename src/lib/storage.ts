@@ -13,19 +13,13 @@ export async function getSignedUrl(
   const hit = cache.get(key);
   if (hit && hit.expires > Date.now()) return hit.url;
 
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUrl(path, 60 * 60 * 6);
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60 * 6);
   if (error || !data?.signedUrl) return null;
   cache.set(key, { url: data.signedUrl, expires: Date.now() + 60 * 60 * 5 * 1000 });
   return data.signedUrl;
 }
 
-export async function uploadFile(
-  bucket: string,
-  userId: string,
-  file: File,
-): Promise<string> {
+export async function uploadFile(bucket: string, userId: string, file: File): Promise<string> {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
   const path = `${userId}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from(bucket).upload(path, file, {

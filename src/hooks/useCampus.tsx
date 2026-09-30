@@ -59,13 +59,8 @@ export function CampusProvider({ children }: { children: ReactNode }) {
   const [freeAccessMode, setFreeAccessMode] = useState(false);
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo>(DEFAULT_PAYMENT_INFO);
 
-
   const loadProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle();
+    const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
     const p = (data as Profile | null) ?? null;
     setProfile(p);
     // Auto-downgrade once a paid tier has lapsed.
@@ -98,7 +93,6 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       }
     }
   }, []);
-
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
@@ -147,8 +141,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [session?.user.id, profile?.avatar_url, loadProfile]);
-
+  }, [session, profile, loadProfile]);
 
   // Firebase Cloud Messaging: request permission, store the device token and
   // surface foreground pushes as toasts. Works in the browser and inside the
@@ -167,7 +160,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [session?.user.id, profile?.notifications_enabled]);
+  }, [session, profile]);
 
   const email = session?.user.email?.toLowerCase() ?? "";
   const isAdmin = email === ADMIN_EMAIL;
