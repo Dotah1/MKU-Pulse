@@ -5,16 +5,16 @@ import { ArrowLeft, Loader2, Reply, Send, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notify } from "@/lib/notify";
 import { useCampus } from "@/hooks/useCampus";
-import { UserAvatar } from "@/components/StoredMedia";
+import { StoredImage, UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { sanitizeText, timeAgo } from "@/lib/campus";
-import { fetchProfiles, type MiniProfile } from "@/lib/campus-data";
+import { fetchProfiles, getOrCreateConversation, type MiniProfile } from "@/lib/campus-data";
 
 export const Route = createFileRoute("/_authenticated/messages")({
   validateSearch: (search: Record<string, unknown>) => ({
-    c: typeof search['c'] === "string" ? (search['c'] as string) : undefined,
-    p: typeof search['p'] === "string" ? (search['p'] as string) : undefined,
+    c: typeof search["c"] === "string" ? (search["c"] as string) : undefined,
+    p: typeof search["p"] === "string" ? (search["p"] as string) : undefined,
   }),
   head: () => ({
     meta: [
@@ -56,7 +56,15 @@ interface PostRef {
 }
 
 /** Small preview of the post a message is about. */
-function PostRefCard({ post, tone }: { post: PostRef; tone: "mine" | "theirs" | "composer" }) {
+function PostRefCard({
+  post,
+  tone,
+  label = "About this post",
+}: {
+  post: PostRef;
+  tone: "mine" | "theirs" | "composer";
+  label?: string;
+}) {
   return (
     <Link
       to="/p/$id"
@@ -75,19 +83,16 @@ function PostRefCard({ post, tone }: { post: PostRef; tone: "mine" | "theirs" | 
         />
       )}
       <span className="min-w-0">
-        <span className="block font-semibold">About this post</span>
-        <span className="block truncate opacity-80">
-          {post.content || "Photo or video post"}
-        </span>
+        <span className="block font-semibold">{label}</span>
+        <span className="block truncate opacity-80">{post.content || "Photo or video post"}</span>
       </span>
     </Link>
   );
 }
 
-
 function MessagesPage() {
   const { user } = useCampus();
-  const { c } = Route.useSearch();
+  const { c, p } = Route.useSearch();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [people, setPeople] = useState<Record<string, MiniProfile>>({});
@@ -103,7 +108,7 @@ function MessagesPage() {
     setConversations(rows);
     setPeople(await fetchProfiles(rows.map((r) => (r.user_a === user.id ? r.user_b : r.user_a))));
     setLoading(false);
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
     void load();
@@ -120,9 +125,42 @@ function MessagesPage() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [user?.id, load]);
+  }, [user, load]);
+
+  useEffect(() => {
+    if (!user || !p || c) return;
+    let active = true;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("posts")
+        .select("id, user_id")
+        .eq("id", p)
+        .maybeSingle();
+      if (!active) return;
+      if (error || !data) {
+        toast.error("That post is unavailable");
+        return;
+      }
+      if (data.user_id === user.id) {
+        toast.error("You can't start a conversation with yourself");
+        return;
+      }
+      try {
+        const conversationId = await getOrCreateConversation(user.id, data.user_id);
+        if (active) void navigate({ to: "/messages", search: { c: conversationId, p } });
+      } catch {
+        toast.error("Could not open a conversation about that post");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [user, p, c, navigate]);
 
   const active = conversations.find((x) => x.id === c);
+  const dismissPost = useCallback(() => {
+    void navigate({ to: "/messages", search: { c: active?.id ?? c, p: undefined } });
+  }, [navigate, active?.id, c]);
 
   if (c && active) {
     const otherId = active.user_a === user?.id ? active.user_b : active.user_a;
@@ -130,7 +168,9 @@ function MessagesPage() {
       <ChatPane
         conversation={active}
         other={people[otherId]}
-        onBack={() => void navigate({ to: "/messages", search: { c: undefined } })}
+        postId={p}
+        onDismissPost={dismissPost}
+        onBack={() => void navigate({ to: "/messages", search: { c: undefined, p: undefined } })}
       />
     );
   }
@@ -164,7 +204,9 @@ function MessagesPage() {
                   />
                 </Link>
                 <button
-                  onClick={() => void navigate({ to: "/messages", search: { c: conv.id } })}
+                  onClick={() =>
+                    void navigate({ to: "/messages", search: { c: conv.id, p: undefined } })
+                  }
                   className="flex flex-1 items-center gap-3 py-3 text-left"
                 >
                   <div className="min-w-0 flex-1">
@@ -189,10 +231,14 @@ function MessagesPage() {
 function ChatPane({
   conversation,
   other,
+  postId,
+  onDismissPost,
   onBack,
 }: {
   conversation: ConversationRow;
   other: MiniProfile | undefined;
+  postId: string | undefined;
+  onDismissPost: () => void;
   onBack: () => void;
 }) {
   const { user, limits } = useCampus();
@@ -200,6 +246,8 @@ function ChatPane({
   const [draft, setDraft] = useState("");
   const [otherTyping, setOtherTyping] = useState(false);
   const [replyTo, setReplyTo] = useState<MessageRow | null>(null);
+  const [postDraft, setPostDraft] = useState<PostRef | null>(null);
+  const [linkedPosts, setLinkedPosts] = useState<Record<string, PostRef>>({});
   const [sending, setSending] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
   const otherId = useMemo(
@@ -210,12 +258,53 @@ function ChatPane({
   const load = useCallback(async () => {
     const { data } = await supabase
       .from("messages")
-      .select("id, conversation_id, sender_id, content, reply_to_id, read_at, created_at")
+      .select("id, conversation_id, sender_id, content, reply_to_id, post_id, read_at, created_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true })
       .limit(300);
-    setMessages((data ?? []) as MessageRow[]);
+    const rows = (data ?? []) as MessageRow[];
+    setMessages(rows);
+    const postIds = [
+      ...new Set(rows.map((message) => message.post_id).filter(Boolean)),
+    ] as string[];
+    if (postIds.length === 0) {
+      setLinkedPosts({});
+      return;
+    }
+    const { data: posts } = await supabase
+      .from("posts")
+      .select("id, content, image_url")
+      .in("id", postIds);
+    const map: Record<string, PostRef> = {};
+    for (const post of (posts ?? []) as PostRef[]) map[post.id] = post;
+    setLinkedPosts(map);
   }, [conversation.id]);
+
+  useEffect(() => {
+    if (!postId) {
+      setPostDraft(null);
+      return;
+    }
+    let active = true;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("posts")
+        .select("id, content, image_url")
+        .eq("id", postId)
+        .maybeSingle();
+      if (!active) return;
+      if (error || !data) {
+        setPostDraft(null);
+        toast.error("That post is unavailable");
+        onDismissPost();
+        return;
+      }
+      setPostDraft(data as PostRef);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [postId, onDismissPost]);
 
   useEffect(() => {
     void load();
@@ -230,7 +319,7 @@ function ChatPane({
       .eq("conversation_id", conversation.id)
       .neq("sender_id", user.id)
       .is("read_at", null);
-  }, [conversation.id, user?.id, messages.length]);
+  }, [conversation.id, user, messages.length]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
@@ -277,13 +366,11 @@ function ChatPane({
     const now = Date.now();
     if (now - lastTyped.current < 1500) return;
     lastTyped.current = now;
-    void supabase
-      .from("typing_state")
-      .upsert({
-        conversation_id: conversation.id,
-        user_id: user.id,
-        updated_at: new Date().toISOString(),
-      });
+    void supabase.from("typing_state").upsert({
+      conversation_id: conversation.id,
+      user_id: user.id,
+      updated_at: new Date().toISOString(),
+    });
   };
 
   const send = async () => {
@@ -294,14 +381,13 @@ function ChatPane({
       return;
     }
     setSending(true);
-    const { error } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: conversation.id,
-        sender_id: user.id,
-        content: text,
-        reply_to_id: replyTo?.id ?? null,
-      });
+    const { error } = await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      sender_id: user.id,
+      content: text,
+      reply_to_id: replyTo?.id ?? null,
+      post_id: postDraft?.id ?? null,
+    });
     if (error) {
       setSending(false);
       toast.error(error.message);
@@ -313,6 +399,10 @@ function ChatPane({
       .eq("id", conversation.id);
     setDraft("");
     setReplyTo(null);
+    if (postDraft) {
+      setPostDraft(null);
+      onDismissPost();
+    }
     setSending(false);
     void notify({
       recipientIds: otherId,
@@ -327,11 +417,21 @@ function ChatPane({
   return (
     <div className="flex h-[calc(100vh-9rem)] flex-col rounded-2xl border border-border bg-card">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <Button variant="ghost" size="sm" className="min-h-11" onClick={onBack} aria-label="Back to inbox">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="min-h-11"
+          onClick={onBack}
+          aria-label="Back to inbox"
+        >
           <ArrowLeft className="size-4" aria-hidden="true" />
         </Button>
         <Link to="/u/$id" params={{ id: otherId }} aria-label="View profile">
-          <UserAvatar path={other?.avatar_url} name={other?.full_name ?? "Student"} className="size-9" />
+          <UserAvatar
+            path={other?.avatar_url}
+            name={other?.full_name ?? "Student"}
+            className="size-9"
+          />
         </Link>
         <div>
           <Link to="/u/$id" params={{ id: otherId }}>
@@ -347,6 +447,7 @@ function ChatPane({
         {messages.map((m) => {
           const mine = m.sender_id === user?.id;
           const quoted = m.reply_to_id ? messages.find((x) => x.id === m.reply_to_id) : null;
+          const linkedPost = m.post_id ? linkedPosts[m.post_id] : undefined;
           return (
             <div
               key={m.id}
@@ -377,12 +478,21 @@ function ChatPane({
                         : "border-primary/50 text-muted-foreground"
                     }`}
                   >
-                    {quoted.sender_id === user?.id ? "You" : other?.full_name ?? "Student"}:{" "}
+                    {quoted.sender_id === user?.id ? "You" : (other?.full_name ?? "Student")}:{" "}
                     {quoted.content}
                   </p>
                 )}
+                {linkedPost && (
+                  <PostRefCard
+                    post={linkedPost}
+                    tone={mine ? "mine" : "theirs"}
+                    label="Referenced post"
+                  />
+                )}
                 <p className="whitespace-pre-wrap">{m.content}</p>
-                <p className={`mt-1 text-[10px] ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                <p
+                  className={`mt-1 text-[10px] ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                >
                   {timeAgo(m.created_at)}
                   {mine ? (m.read_at ? " · Read" : " · Sent") : ""}
                 </p>
@@ -407,10 +517,31 @@ function ChatPane({
       {replyTo && (
         <div className="flex items-center gap-2 border-t border-border bg-secondary/60 px-3 py-2 text-xs">
           <span className="min-w-0 flex-1 truncate">
-            Replying to {replyTo.sender_id === user?.id ? "yourself" : other?.full_name ?? "student"}:{" "}
+            Replying to{" "}
+            {replyTo.sender_id === user?.id ? "yourself" : (other?.full_name ?? "student")}:{" "}
             {replyTo.content}
           </span>
           <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {postDraft && (
+        <div className="flex items-start gap-2 border-t border-border bg-secondary/40 px-3 py-2 text-xs">
+          <div className="min-w-0 flex-1">
+            <p className="mb-1 font-semibold text-foreground">Replying to post</p>
+            <PostRefCard post={postDraft} tone="composer" label="Tap to open post" />
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setPostDraft(null);
+              onDismissPost();
+            }}
+            aria-label="Dismiss post preview"
+            className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
             <X className="size-4" aria-hidden="true" />
           </button>
         </div>
@@ -432,7 +563,12 @@ function ChatPane({
           aria-label="Message"
           className="min-h-11 resize-none"
         />
-        <Button onClick={() => void send()} disabled={sending} className="min-h-11" aria-label="Send">
+        <Button
+          onClick={() => void send()}
+          disabled={sending}
+          className="min-h-11"
+          aria-label="Send"
+        >
           <Send className="size-4" aria-hidden="true" />
         </Button>
       </div>

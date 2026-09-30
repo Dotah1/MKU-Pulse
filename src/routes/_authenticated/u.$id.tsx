@@ -86,7 +86,7 @@ function PublicProfilePage() {
     if (!user || mine) return;
     try {
       const cid = await getOrCreateConversation(user.id, id);
-      void navigate({ to: "/messages", search: { c: cid } });
+      void navigate({ to: "/messages", search: { c: cid, p: undefined } });
     } catch {
       toast.error("Could not open that chat");
     }

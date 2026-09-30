@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Loader2, ShieldAlert, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, ShieldAlert, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notify } from "@/lib/notify";
 import { deleteUserAccount } from "@/lib/admin.functions";
@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TIER_LIMITS, sanitizeText, timeAgo, type Tier } from "@/lib/campus";
 import { fetchProfiles, type MiniProfile } from "@/lib/campus-data";
-
+import { uploadFile } from "@/lib/storage";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -97,6 +97,9 @@ function AdminPage() {
   const [announcement, setAnnouncement] = useState("");
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollChoices, setPollChoices] = useState(["", "", "", ""]);
+  const [pollImage, setPollImage] = useState<File | null>(null);
+  const [pollImagePreview, setPollImagePreview] = useState<string | null>(null);
+  const pollImageInput = useRef<HTMLInputElement>(null);
   const [pollBusy, setPollBusy] = useState(false);
   const [userQuery, setUserQuery] = useState("");
   const [found, setFound] = useState<
@@ -104,6 +107,15 @@ function AdminPage() {
   >([]);
   const [searching, setSearching] = useState(false);
 
+  useEffect(() => {
+    if (!pollImage) {
+      setPollImagePreview(null);
+      return;
+    }
+    const preview = URL.createObjectURL(pollImage);
+    setPollImagePreview(preview);
+    return () => URL.revokeObjectURL(preview);
+  }, [pollImage]);
 
   const load = useCallback(async () => {
     const [p, a, r, students, posts, matches] = await Promise.all([
@@ -167,9 +179,11 @@ function AdminPage() {
 
   const setFreeAccess = async (enabled: boolean) => {
     setFreeAccessModeLocal(enabled);
-    const { error } = await supabase
-      .from("app_settings")
-      .upsert({ key: "free_access_mode", value: { enabled }, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from("app_settings").upsert({
+      key: "free_access_mode",
+      value: { enabled },
+      updated_at: new Date().toISOString(),
+    });
     if (error) {
       setFreeAccessModeLocal(!enabled);
       toast.error(error.message);
@@ -319,27 +333,36 @@ function AdminPage() {
       return;
     }
     setPollBusy(true);
-    const { data, error } = await supabase
-      .from("polls")
-      .insert({ question, created_by: user.id })
-      .select("id")
-      .single();
-    if (error || !data) {
+    let imagePath: string | null = null;
+    try {
+      if (pollImage) imagePath = await uploadFile("media", user.id, pollImage);
+      const { data, error } = await supabase
+        .from("polls")
+        .insert({ question, created_by: user.id, image_url: imagePath })
+        .select("id")
+        .single();
+      if (error || !data) {
+        if (imagePath) await supabase.storage.from("media").remove([imagePath]);
+        toast.error(error?.message ?? "Could not create the poll");
+        return;
+      }
+      const { error: optError } = await supabase
+        .from("poll_options")
+        .insert(choices.map((label, i) => ({ poll_id: data.id, label, position: i })));
+      if (optError) {
+        toast.error(optError.message);
+        return;
+      }
+      setPollQuestion("");
+      setPollChoices(["", "", "", ""]);
+      setPollImage(null);
+      if (pollImageInput.current) pollImageInput.current.value = "";
+      toast.success("Poll published to the feed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not upload the poll image");
+    } finally {
       setPollBusy(false);
-      toast.error(error?.message ?? "Could not create the poll");
-      return;
     }
-    const { error: optError } = await supabase
-      .from("poll_options")
-      .insert(choices.map((label, i) => ({ poll_id: data.id, label, position: i })));
-    setPollBusy(false);
-    if (optError) {
-      toast.error(optError.message);
-      return;
-    }
-    setPollQuestion("");
-    setPollChoices(["", "", "", ""]);
-    toast.success("Poll published to the feed");
   };
 
   const searchUsers = async () => {
@@ -397,7 +420,6 @@ function AdminPage() {
       toast.error(e instanceof Error ? e.message : "Could not delete that account");
     }
   };
-
 
   return (
     <div className="space-y-6">
@@ -519,6 +541,61 @@ function AdminPage() {
             />
           ))}
         </div>
+        <div className="mt-3 space-y-2">
+          <Label htmlFor="poll-image">Poll image (optional)</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              ref={pollImageInput}
+              id="poll-image"
+              type="file"
+              accept="image/*"
+              aria-label="Choose a poll image"
+              className="min-h-11 file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0] ?? null;
+                event.currentTarget.value = "";
+                if (!file) return;
+                if (!file.type.startsWith("image/")) {
+                  toast.error("Choose an image file");
+                  return;
+                }
+                if (file.size > 10 * 1024 * 1024) {
+                  toast.error("Poll images must be 10 MB or smaller");
+                  return;
+                }
+                setPollImage(file);
+              }}
+            />
+            {pollImage && (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 shrink-0"
+                onClick={() => {
+                  setPollImage(null);
+                  if (pollImageInput.current) pollImageInput.current.value = "";
+                }}
+                aria-label="Remove poll image"
+              >
+                <Trash2 className="mr-1 size-4" aria-hidden="true" /> Remove
+              </Button>
+            )}
+          </div>
+          {pollImagePreview ? (
+            <div className="relative w-fit overflow-hidden rounded-xl border border-border">
+              <img
+                src={pollImagePreview}
+                alt="Poll image preview"
+                className="max-h-56 max-w-full object-contain"
+              />
+            </div>
+          ) : (
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">
+              <ImagePlus className="size-3.5" aria-hidden="true" /> Add an image to illustrate the
+              poll.
+            </p>
+          )}
+        </div>
         <Button className="mt-3 min-h-11" disabled={pollBusy} onClick={() => void createPoll()}>
           {pollBusy ? "Publishing…" : "Publish poll"}
         </Button>
@@ -561,26 +638,50 @@ function AdminPage() {
                 <div className="flex items-center gap-3">
                   <UserAvatar path={u.avatar_url} name={u.full_name} className="size-10" />
                   <div className="min-w-0">
-                    <Link to="/u/$id" params={{ id: u.id }} className="text-sm font-semibold hover:underline">
+                    <Link
+                      to="/u/$id"
+                      params={{ id: u.id }}
+                      className="text-sm font-semibold hover:underline"
+                    >
                       {u.full_name}
                     </Link>
                     <p className="text-xs text-muted-foreground">
-                      {u.is_banned ? "Banned" : blocked ? `Posting paused until ${new Date(u.post_block_until!).toLocaleString()}` : "Active"}
+                      {u.is_banned
+                        ? "Banned"
+                        : blocked
+                          ? `Posting paused until ${new Date(u.post_block_until!).toLocaleString()}`
+                          : "Active"}
                     </p>
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button variant="outline" className="min-h-11" onClick={() => void blockPosting(u.id, 1)}>
+                  <Button
+                    variant="outline"
+                    className="min-h-11"
+                    onClick={() => void blockPosting(u.id, 1)}
+                  >
                     Pause 1h
                   </Button>
-                  <Button variant="outline" className="min-h-11" onClick={() => void blockPosting(u.id, 24)}>
+                  <Button
+                    variant="outline"
+                    className="min-h-11"
+                    onClick={() => void blockPosting(u.id, 24)}
+                  >
                     Pause 24h
                   </Button>
-                  <Button variant="outline" className="min-h-11" onClick={() => void blockPosting(u.id, 168)}>
+                  <Button
+                    variant="outline"
+                    className="min-h-11"
+                    onClick={() => void blockPosting(u.id, 168)}
+                  >
                     Pause 7 days
                   </Button>
                   {blocked && (
-                    <Button variant="ghost" className="min-h-11" onClick={() => void blockPosting(u.id, 0)}>
+                    <Button
+                      variant="ghost"
+                      className="min-h-11"
+                      onClick={() => void blockPosting(u.id, 0)}
+                    >
                       Allow posting
                     </Button>
                   )}
@@ -605,7 +706,6 @@ function AdminPage() {
           })}
         </ul>
       </section>
-
 
       {loading ? (
         <Loader2 className="mx-auto my-12 size-6 animate-spin text-muted-foreground" />
@@ -682,9 +782,7 @@ function AdminPage() {
                   </div>
                 </div>
                 <p className="mt-2 text-sm">{row.experience}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Available: {row.availability}
-                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Available: {row.availability}</p>
                 <div className="mt-3 flex gap-2">
                   <Button className="min-h-11" onClick={() => void decideMentor(row, true)}>
                     Approve
@@ -759,7 +857,6 @@ function AdminPage() {
               </div>
             ))}
           </TabsContent>
-
         </Tabs>
       )}
     </div>

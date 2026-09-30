@@ -90,7 +90,7 @@ function MentorshipPage() {
     if (!user) return;
     try {
       const id = await getOrCreateConversation(user.id, mentorId);
-      void navigate({ to: "/messages", search: { c: id } });
+      void navigate({ to: "/messages", search: { c: id, p: undefined } });
     } catch {
       toast.error("Could not open that chat");
     }
@@ -372,7 +372,7 @@ function IncomingRequests() {
           prev.map((r) => (r.id === row.id ? { ...r, status: "approved" as const } : r)),
         );
       }
-      void navigate({ to: "/messages", search: { c: id } });
+      void navigate({ to: "/messages", search: { c: id, p: undefined } });
     } catch {
       toast.error("Could not open that chat");
     }
@@ -444,4 +444,3 @@ function IncomingRequests() {
     </section>
   );
 }
-

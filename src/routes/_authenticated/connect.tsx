@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Heart, Loader2, Star, X } from "lucide-react";
@@ -8,7 +14,13 @@ import { useCampus } from "@/hooks/useCampus";
 import { StoredImage, UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { countToday, fetchProfiles, getOrCreateConversation, type MiniProfile } from "@/lib/campus-data";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  countToday,
+  fetchProfiles,
+  getOrCreateConversation,
+  type MiniProfile,
+} from "@/lib/campus-data";
 
 export const Route = createFileRoute("/_authenticated/connect")({
   head: () => ({
@@ -32,15 +44,33 @@ interface MatchRow {
   created_at: string;
 }
 
+type SwipeAction = "like" | "pass" | "super_like";
+type ChangeableSwipeAction = "like" | "pass";
+type ConnectTab = "discover" | "matches" | "history";
+
+interface SwipeRow {
+  swipee_id: string;
+  action: SwipeAction;
+  created_at: string;
+}
+
 function ConnectPage() {
   const { user, profile, limits, tier } = useCampus();
   const navigate = useNavigate();
+  const [tab, setTab] = useState<ConnectTab>("discover");
   const [deck, setDeck] = useState<MiniProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [swipesToday, setSwipesToday] = useState(0);
   const [superToday, setSuperToday] = useState(0);
   const [matches, setMatches] = useState<MatchRow[]>([]);
   const [matchProfiles, setMatchProfiles] = useState<Record<string, MiniProfile>>({});
+  const [swipeHistory, setSwipeHistory] = useState<SwipeRow[]>([]);
+  const [historyProfiles, setHistoryProfiles] = useState<Record<string, MiniProfile>>({});
+  const [updatingSwipe, setUpdatingSwipe] = useState<string | null>(null);
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
 
   const loadDeck = useCallback(async () => {
     if (!user) return;
@@ -53,28 +83,32 @@ function ConnectPage() {
     seen.add(user.id);
 
     // Only show the opposite gender.
-    const wanted = profile?.gender === "male" ? "female" : profile?.gender === "female" ? "male" : null;
+    const wanted =
+      profile?.gender === "male" ? "female" : profile?.gender === "female" ? "male" : null;
 
     let query = supabase
       .from("profiles")
-      .select("id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_banned, is_private")
+      .select(
+        "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_banned, is_private",
+      )
       .eq("is_banned", false)
       .eq("is_private", false);
     if (wanted) query = query.eq("gender", wanted);
     const { data } = await query.limit(200);
 
     const list = ((data ?? []) as (MiniProfile & { is_banned: boolean })[]).filter(
-      (p) => !seen.has(p.id),
+      (person) => !seen.has(person.id),
     );
     setDeck(list.sort(() => Math.random() - 0.5).slice(0, 40));
     setSwipesToday(await countToday("swipes", "swiper_id", user.id));
     const supers = (swiped ?? []).filter(
-      (s) => s.action === "super_like" && new Date(s.created_at as string).toDateString() === new Date().toDateString(),
+      (swipe) =>
+        swipe.action === "super_like" &&
+        new Date(swipe.created_at as string).toDateString() === new Date().toDateString(),
     ).length;
     setSuperToday(supers);
     setLoading(false);
-  }, [user?.id, profile?.gender]);
-
+  }, [user, profile?.gender]);
 
   const loadMatches = useCallback(async () => {
     if (!user) return;
@@ -85,14 +119,32 @@ function ConnectPage() {
       .order("created_at", { ascending: false });
     const rows = (data ?? []) as MatchRow[];
     setMatches(rows);
-    const others = rows.map((m) => (m.user_a === user.id ? m.user_b : m.user_a));
+    const others = rows.map((match) => (match.user_a === user.id ? match.user_b : match.user_a));
     setMatchProfiles(await fetchProfiles(others));
-  }, [user?.id]);
+  }, [user]);
+
+  const loadHistory = useCallback(async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from("swipes")
+      .select("swipee_id, action, created_at")
+      .eq("swiper_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    const rows = (data ?? []) as SwipeRow[];
+    setSwipeHistory(rows);
+    setHistoryProfiles(await fetchProfiles(rows.map((row) => row.swipee_id)));
+  }, [user]);
 
   useEffect(() => {
     void loadDeck();
     void loadMatches();
-  }, [loadDeck, loadMatches]);
+    void loadHistory();
+  }, [loadDeck, loadMatches, loadHistory]);
 
   useEffect(() => {
     if (!user) return;
@@ -105,12 +157,12 @@ function ConnectPage() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [user?.id, loadMatches]);
+  }, [user, loadMatches]);
 
   const current = deck[0];
   const outOfSwipes = swipesToday >= limits.swipesPerDay;
 
-  const swipe = async (action: "like" | "pass" | "super_like") => {
+  const swipe = async (action: SwipeAction) => {
     if (!user || !current) return;
     if (outOfSwipes) {
       toast.error(`Daily swipe limit reached on the ${limits.label} plan`);
@@ -120,16 +172,17 @@ function ConnectPage() {
       toast.error("No super likes left today");
       return;
     }
-    setDeck((d) => d.slice(1));
+    setDeck((items) => items.slice(1));
     const { error } = await supabase
       .from("swipes")
       .insert({ swiper_id: user.id, swipee_id: current.id, action });
     if (error) {
+      setDeck((items) => [current, ...items.filter((item) => item.id !== current.id)]);
       toast.error(error.message);
       return;
     }
-    setSwipesToday((n) => n + 1);
-    if (action === "super_like") setSuperToday((n) => n + 1);
+    setSwipesToday((count) => count + 1);
+    if (action === "super_like") setSuperToday((count) => count + 1);
     if (action !== "pass") {
       // The database creates the match on a mutual like — tell them if it happened.
       const [a, b] = user.id < current.id ? [user.id, current.id] : [current.id, user.id];
@@ -138,6 +191,7 @@ function ConnectPage() {
         .select("id")
         .eq("user_a", a)
         .eq("user_b", b)
+        .eq("is_active", true)
         .maybeSingle();
       if (match) {
         void notify({
@@ -149,7 +203,47 @@ function ConnectPage() {
         });
       }
     }
-    await loadMatches();
+    await Promise.all([loadMatches(), loadHistory()]);
+  };
+
+  const changeVote = async (row: SwipeRow, action: ChangeableSwipeAction) => {
+    if (!user || updatingSwipe) return;
+    setUpdatingSwipe(row.swipee_id);
+    const { error } = await supabase
+      .from("swipes")
+      .update({ action })
+      .eq("swiper_id", user.id)
+      .eq("swipee_id", row.swipee_id);
+    setUpdatingSwipe(null);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setSwipeHistory((rows) =>
+      rows.map((item) => (item.swipee_id === row.swipee_id ? { ...item, action } : item)),
+    );
+    toast.success(action === "like" ? "Vote changed to Like" : "Vote changed to Pass");
+
+    if (row.action === "pass" && action === "like") {
+      const [a, b] = user.id < row.swipee_id ? [user.id, row.swipee_id] : [row.swipee_id, user.id];
+      const { data: match } = await supabase
+        .from("matches")
+        .select("id")
+        .eq("user_a", a)
+        .eq("user_b", b)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (match) {
+        void notify({
+          recipientIds: row.swipee_id,
+          title: "It's a match!",
+          body: "You matched with someone on MKU Pulse.",
+          url: "/connect",
+          kind: "match",
+        });
+      }
+    }
+    await Promise.all([loadDeck(), loadMatches(), loadHistory()]);
   };
 
   const openChat = async (otherId: string) => {
@@ -161,15 +255,49 @@ function ConnectPage() {
     }
     try {
       const id = await getOrCreateConversation(user.id, otherId);
-      void navigate({ to: "/messages", search: { c: id } });
+      void navigate({ to: "/messages", search: { c: id, p: undefined } });
     } catch {
       toast.error("Could not open that chat");
     }
   };
 
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+    dragStart.current = { x: event.clientX, y: event.clientY };
+    setDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = dragStart.current;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 16) return;
+    setDragX(dx);
+  };
+
+  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = dragStart.current;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    dragStart.current = null;
+    setDragging(false);
+    if (Math.abs(dx) >= 100) {
+      suppressClick.current = true;
+      void swipe(dx > 0 ? "like" : "pass");
+      window.setTimeout(() => {
+        suppressClick.current = false;
+      }, 500);
+    }
+    setDragX(0);
+  };
+
+  const outOfSuperLikes = superToday >= limits.superLikesPerDay;
+
   return (
-    <div className="space-y-8">
-      <section>
+    <div className="space-y-5">
+      <header>
         <h1 className="font-display text-2xl font-bold">Connect</h1>
         <p className="text-sm text-muted-foreground">
           {Math.max(0, limits.swipesPerDay - swipesToday)} swipes left today
@@ -178,129 +306,264 @@ function ConnectPage() {
             : ""}
           {tier === "free" ? " · upgrade for more" : ""}
         </p>
+      </header>
 
-        <div className="mt-4 flex justify-center">
-          {loading ? (
-            <Loader2 className="my-16 size-6 animate-spin text-muted-foreground" />
-          ) : !current ? (
-            <p className="my-16 max-w-sm text-center text-sm text-muted-foreground">
-              You've seen everyone for now. Check back later as more students join.
-            </p>
-          ) : (
-            <div className="w-full max-w-sm overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
-              <Link
-                to="/u/$id"
-                params={{ id: current.id }}
-                aria-label={`View ${current.full_name}'s profile`}
-              >
-                {current.avatar_url ? (
-                  <StoredImage
-                    bucket="avatars"
-                    path={current.avatar_url}
-                    alt={current.full_name}
-                    className="h-96 w-full object-cover"
-                  />
+      <Tabs value={tab} onValueChange={(value) => setTab(value as ConnectTab)}>
+        <TabsList className="grid h-auto w-full grid-cols-3">
+          <TabsTrigger value="discover" className="min-h-11">
+            Discover
+          </TabsTrigger>
+          <TabsTrigger value="matches" className="min-h-11">
+            Matches
+          </TabsTrigger>
+          <TabsTrigger value="history" className="min-h-11">
+            Swiped / Passed
+          </TabsTrigger>
+        </TabsList>
 
-                ) : (
-                  <div className="flex h-96 items-center justify-center bg-secondary">
-                    <UserAvatar path={null} name={current.full_name} className="size-24" />
-                  </div>
-                )}
-              </Link>
-              <div className="p-4">
-                <Link to="/u/$id" params={{ id: current.id }}>
-                  <h2 className="font-display text-lg font-bold hover:underline">
-                    {current.full_name}
-                  </h2>
-                </Link>
-                <p className="text-sm text-muted-foreground">
-                  Year {current.year_of_study} · {current.major || "Student"}
+        <TabsContent value="discover" className="mt-5">
+          <section>
+            <div className="flex justify-center">
+              {loading ? (
+                <Loader2 className="my-16 size-6 animate-spin text-muted-foreground" />
+              ) : !current ? (
+                <p className="my-16 max-w-sm text-center text-sm text-muted-foreground">
+                  You've seen everyone for now. Check back later as more students join.
                 </p>
-                {current.bio && <p className="mt-2 text-sm">{current.bio}</p>}
-                <div className="mt-3 flex flex-wrap gap-1">
-                  {(current.interests ?? []).slice(0, 6).map((i) => (
-                    <Badge key={i} variant="secondary">
-                      {i}
-                    </Badge>
-                  ))}
-                </div>
-                <div className="mt-4 flex items-center justify-center gap-3">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="size-14 rounded-full p-0"
-                    aria-label="Pass"
-                    onClick={() => void swipe("pass")}
-                  >
-                    <X className="size-6" aria-hidden="true" />
-                  </Button>
-                  {limits.superLikesPerDay > 0 && (
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      className="size-14 rounded-full border-accent p-0 text-accent"
-                      aria-label="Super like"
-                      onClick={() => void swipe("super_like")}
-                    >
-                      <Star className="size-6" aria-hidden="true" />
-                    </Button>
-                  )}
-                  <Button
-                    size="lg"
-                    className="size-16 rounded-full p-0"
-                    aria-label="Like"
-                    onClick={() => void swipe("like")}
-                  >
-                    <Heart className="size-7" aria-hidden="true" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="font-display text-lg font-bold">Your matches</h2>
-        {matches.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">No matches yet — keep swiping.</p>
-        ) : (
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {matches.map((m) => {
-              const otherId = m.user_a === user?.id ? m.user_b : m.user_a;
-              const p = matchProfiles[otherId];
-              return (
+              ) : (
                 <div
-                  key={m.id}
-                  className="rounded-2xl border border-border bg-card p-3 text-left"
+                  className="relative w-full max-w-sm touch-pan-y select-none overflow-hidden rounded-3xl border border-border bg-card shadow-sm"
+                  style={{
+                    transform: `translateX(${dragX}px) rotate(${Math.max(-14, Math.min(14, dragX / 18))}deg)`,
+                    transition: dragging ? "none" : "transform 180ms ease-out",
+                    touchAction: "pan-y",
+                  }}
+                  onPointerDown={onPointerDown}
+                  onPointerMove={onPointerMove}
+                  onPointerUp={onPointerUp}
+                  onPointerCancel={() => {
+                    dragStart.current = null;
+                    setDragging(false);
+                    setDragX(0);
+                  }}
+                  onClickCapture={(event) => {
+                    if (suppressClick.current) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      suppressClick.current = false;
+                    }
+                  }}
                 >
-                  <Link to="/u/$id" params={{ id: otherId }} className="block">
-                    <UserAvatar
-                      path={p?.avatar_url}
-                      name={p?.full_name ?? "Student"}
-                      className="size-14"
-                    />
-                    <p className="mt-2 truncate text-sm font-semibold hover:underline">
-                      {p?.full_name ?? "Student"}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {p?.major || "Student"}
-                    </p>
-                  </Link>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 min-h-11 w-full"
-                    onClick={() => void openChat(otherId)}
+                  {dragX > 12 && (
+                    <span
+                      className="pointer-events-none absolute left-5 top-5 z-10 rotate-[-12deg] rounded-lg border-2 border-emerald-500 bg-emerald-500/90 px-3 py-1 text-lg font-black tracking-widest text-white shadow-lg"
+                      style={{ opacity: Math.min(1, dragX / 90) }}
+                    >
+                      LIKE
+                    </span>
+                  )}
+                  {dragX < -12 && (
+                    <span
+                      className="pointer-events-none absolute right-5 top-5 z-10 rotate-[12deg] rounded-lg border-2 border-red-500 bg-red-500/90 px-3 py-1 text-lg font-black tracking-widest text-white shadow-lg"
+                      style={{ opacity: Math.min(1, Math.abs(dragX) / 90) }}
+                    >
+                      PASS
+                    </span>
+                  )}
+                  <Link
+                    to="/u/$id"
+                    params={{ id: current.id }}
+                    aria-label={`View ${current.full_name}'s profile`}
+                    draggable={false}
                   >
-                    Message
-                  </Button>
+                    {current.avatar_url ? (
+                      <StoredImage
+                        bucket="avatars"
+                        path={current.avatar_url}
+                        alt={current.full_name}
+                        className="h-96 w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-96 items-center justify-center bg-secondary">
+                        <UserAvatar path={null} name={current.full_name} className="size-24" />
+                      </div>
+                    )}
+                  </Link>
+                  <div className="p-4">
+                    <Link to="/u/$id" params={{ id: current.id }}>
+                      <h2 className="font-display text-lg font-bold hover:underline">
+                        {current.full_name}
+                      </h2>
+                    </Link>
+                    <p className="text-sm text-muted-foreground">
+                      Year {current.year_of_study} · {current.major || "Student"}
+                    </p>
+                    {current.bio && <p className="mt-2 text-sm">{current.bio}</p>}
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {(current.interests ?? []).slice(0, 6).map((interest) => (
+                        <Badge key={interest} variant="secondary">
+                          {interest}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex items-center justify-center gap-3">
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        className="size-14 rounded-full p-0"
+                        aria-label="Pass"
+                        onClick={() => void swipe("pass")}
+                      >
+                        <X className="size-6" aria-hidden="true" />
+                      </Button>
+                      {limits.superLikesPerDay > 0 && (
+                        <Button
+                          variant="outline"
+                          size="lg"
+                          className="size-14 rounded-full border-accent p-0 text-accent"
+                          aria-label="Super like"
+                          onClick={() => void swipe("super_like")}
+                          disabled={outOfSuperLikes}
+                        >
+                          <Star className="size-6" aria-hidden="true" />
+                        </Button>
+                      )}
+                      <Button
+                        size="lg"
+                        className="size-16 rounded-full p-0"
+                        aria-label="Like"
+                        onClick={() => void swipe("like")}
+                      >
+                        <Heart className="size-7" aria-hidden="true" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+              )}
+            </div>
+          </section>
+        </TabsContent>
+
+        <TabsContent value="matches" className="mt-5">
+          <section>
+            {matches.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                No matches yet — keep swiping.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {matches.map((match) => {
+                  const otherId = match.user_a === user?.id ? match.user_b : match.user_a;
+                  const person = matchProfiles[otherId];
+                  return (
+                    <div
+                      key={match.id}
+                      className="rounded-2xl border border-border bg-card p-3 text-left"
+                    >
+                      <Link to="/u/$id" params={{ id: otherId }} className="block">
+                        <UserAvatar
+                          path={person?.avatar_url}
+                          name={person?.full_name ?? "Student"}
+                          className="size-14"
+                        />
+                        <p className="mt-2 truncate text-sm font-semibold hover:underline">
+                          {person?.full_name ?? "Student"}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {person?.major || "Student"}
+                        </p>
+                      </Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 min-h-11 w-full"
+                        onClick={() => void openChat(otherId)}
+                      >
+                        Message
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-5">
+          <section>
+            {swipeHistory.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                Profiles you pass or like will appear here.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+                {swipeHistory.map((row) => {
+                  const person = historyProfiles[row.swipee_id];
+                  const status =
+                    row.action === "super_like"
+                      ? "Superliked"
+                      : row.action === "like"
+                        ? "Liked"
+                        : "Passed";
+                  const nextAction: ChangeableSwipeAction = row.action === "pass" ? "like" : "pass";
+                  return (
+                    <li key={row.swipee_id} className="flex items-center gap-3 p-3 sm:p-4">
+                      <Link to="/u/$id" params={{ id: row.swipee_id }} className="shrink-0">
+                        <UserAvatar
+                          path={person?.avatar_url}
+                          name={person?.full_name ?? "Student"}
+                          className="size-12"
+                        />
+                      </Link>
+                      <div className="min-w-0 flex-1">
+                        <Link to="/u/$id" params={{ id: row.swipee_id }}>
+                          <p className="truncate text-sm font-semibold hover:underline">
+                            {person?.full_name ?? "Student"}
+                          </p>
+                        </Link>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {person?.major || "Student"}
+                          {person?.year_of_study ? ` · Year ${person.year_of_study}` : ""}
+                        </p>
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className={
+                          row.action === "pass"
+                            ? "text-muted-foreground"
+                            : "bg-primary/10 text-primary"
+                        }
+                      >
+                        {status}
+                      </Badge>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="min-h-11 shrink-0"
+                        disabled={updatingSwipe === row.swipee_id}
+                        onClick={() => void changeVote(row, nextAction)}
+                        aria-label={`Change ${status.toLowerCase()} vote for ${person?.full_name ?? "student"} to ${nextAction}`}
+                      >
+                        {updatingSwipe === row.swipee_id ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        ) : nextAction === "like" ? (
+                          <>
+                            <Heart className="mr-1 size-4" aria-hidden="true" /> Like
+                          </>
+                        ) : (
+                          <>
+                            <X className="mr-1 size-4" aria-hidden="true" /> Pass
+                          </>
+                        )}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
