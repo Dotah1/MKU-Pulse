@@ -30,7 +30,7 @@ import {
   type Gender,
   type Tier,
 } from "@/lib/campus";
-import { uploadFile } from "@/lib/storage";
+import { compressImageFile, uploadFile } from "@/lib/storage";
 import { disablePush, enablePush } from "@/lib/push";
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -62,6 +62,7 @@ function ProfilePage() {
   const [interests, setInterests] = useState<string[]>([]);
   const [ownInterest, setOwnInterest] = useState("");
   const [saving, setSaving] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
 
   const addOwnInterest = () => {
     const value = sanitizeText(ownInterest, 30).trim();
@@ -144,13 +145,14 @@ function ProfilePage() {
       toast.error("Choose an image file");
       return;
     }
-    if (file.size > AVATAR_MAX_BYTES) {
-      toast.error("Profile picture must be 5MB or smaller");
-      return;
-    }
 
+    setAvatarBusy(true);
     try {
-      const path = await uploadFile("avatars", user.id, file);
+      const compressed = await compressImageFile(file);
+      if (compressed.size > AVATAR_MAX_BYTES) {
+        throw new Error("Compressed profile picture must be 5MB or smaller");
+      }
+      const path = await uploadFile("avatars", user.id, compressed, { alreadyCompressed: true });
       const { error } = await supabase
         .from("profiles")
         .update({ avatar_url: path })
@@ -158,8 +160,10 @@ function ProfilePage() {
       if (error) throw error;
       toast.success("Photo updated");
       await refreshProfile();
-    } catch {
-      toast.error("Could not upload that photo");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not upload that photo");
+    } finally {
+      setAvatarBusy(false);
     }
   };
 
@@ -199,17 +203,26 @@ function ProfilePage() {
           />
           <label
             htmlFor="avatar-input"
-            className="absolute -bottom-1 -right-1 flex size-9 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground"
+            className={`absolute -bottom-1 -right-1 flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground ${avatarBusy ? "cursor-wait opacity-70" : "cursor-pointer"}`}
             aria-label="Change profile photo"
           >
-            <Upload className="size-4" aria-hidden="true" />
+            {avatarBusy ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Upload className="size-4" aria-hidden="true" />
+            )}
           </label>
           <input
             id="avatar-input"
             type="file"
             accept="image/*"
             className="sr-only"
-            onChange={(e) => void changeAvatar(e.target.files?.[0] ?? null)}
+            disabled={avatarBusy}
+            onChange={(e) => {
+              const selected = e.currentTarget.files?.[0] ?? null;
+              e.currentTarget.value = "";
+              void changeAvatar(selected);
+            }}
           />
         </div>
         <div>

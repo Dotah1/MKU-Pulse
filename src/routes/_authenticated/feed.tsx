@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Image as ImageIcon, Loader2, Video, X } from "lucide-react";
@@ -11,9 +11,33 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { CampusToolsDialog } from "@/components/CampusToolsDialog";
 import { POST_MEDIA_MAX_BYTES, POST_VIDEO_MAX_SECONDS, sanitizeText } from "@/lib/campus";
-import { uploadFile, videoDuration } from "@/lib/storage";
+import { compressImageFile, uploadFile, videoDuration } from "@/lib/storage";
 import { countToday } from "@/lib/campus-data";
+
+const FEED_FILTERS = [
+  { id: "all", label: "#All" },
+  { id: "trending", label: "#Trending" },
+  { id: "lost-and-found", label: "#LostAndFound" },
+  { id: "confessions", label: "#Confessions" },
+  { id: "hostel-vibes", label: "#HostelVibes" },
+] as const;
+
+type FeedFilter = (typeof FEED_FILTERS)[number]["id"];
+
+function postMatchesFilter(content: string, filter: FeedFilter): boolean {
+  if (filter === "all") return true;
+  const text = content.toLowerCase();
+  const patterns: Record<Exclude<FeedFilter, "all">, RegExp> = {
+    trending: /#trending\b|\btrending\b|\bviral\b/i,
+    "lost-and-found":
+      /#lostandfound\b|#lost\b|#found\b|\blost\s+and\s+found\b|\b(?:lost|found)\s+(?:item|keys?|phone|wallet|id|card|book|bag)\b/i,
+    confessions: /#confessions?\b|\bconfessions?\b/i,
+    "hostel-vibes": /#hostelvibes\b|\bhostel(?:\s+vibes)?\b|\broommates?\b|\bdorm\b/i,
+  };
+  return patterns[filter].test(text);
+}
 
 export const Route = createFileRoute("/_authenticated/feed")({
   head: () => ({
@@ -38,7 +62,12 @@ function FeedPage() {
   const [pollOptions, setPollOptions] = useState<Record<string, PollOptionRow[]>>({});
   const [loading, setLoading] = useState(true);
   const [usedToday, setUsedToday] = useState(0);
+  const [activeFilter, setActiveFilter] = useState<FeedFilter>("all");
   const authors = usePostAuthors(posts);
+  const filteredPosts = useMemo(
+    () => posts.filter((post) => postMatchesFilter(post.content, activeFilter)),
+    [posts, activeFilter],
+  );
 
   const load = async () => {
     const [{ data, error }, pollData] = await Promise.all([
@@ -73,14 +102,33 @@ function FeedPage() {
 
   return (
     <div className="space-y-4">
-      <header>
-        <h1 className="font-display text-2xl font-bold">Campus feed</h1>
-        <p className="text-sm text-muted-foreground">
-          {tier === "free"
-            ? `${limits.postsPerDay - usedToday} of ${limits.postsPerDay} text posts left today · upgrade for photos & video`
-            : `${Math.max(0, limits.postsPerDay - usedToday)} posts left today on your ${limits.label} plan`}
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold">Campus feed</h1>
+          <p className="text-sm text-muted-foreground">
+            {tier === "free"
+              ? `${limits.postsPerDay - usedToday} of ${limits.postsPerDay} text posts left today · upgrade for photos & video`
+              : `${Math.max(0, limits.postsPerDay - usedToday)} posts left today on your ${limits.label} plan`}
+          </p>
+        </div>
+        <CampusToolsDialog />
       </header>
+
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filter posts by hashtag">
+        {FEED_FILTERS.map((filter) => (
+          <Button
+            key={filter.id}
+            type="button"
+            size="sm"
+            variant={activeFilter === filter.id ? "default" : "outline"}
+            className="min-h-10 rounded-full"
+            aria-pressed={activeFilter === filter.id}
+            onClick={() => setActiveFilter(filter.id)}
+          >
+            {filter.label}
+          </Button>
+        ))}
+      </div>
 
       {blocked && blockedUntil && (
         <p className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
@@ -114,9 +162,14 @@ function FeedPage() {
         <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Nothing here yet — be the first to post.
         </p>
+      ) : filteredPosts.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          No posts match {FEED_FILTERS.find((filter) => filter.id === activeFilter)?.label} yet. Try
+          another hashtag.
+        </p>
       ) : (
         <div className="space-y-4">
-          {posts.map((p) => (
+          {filteredPosts.map((p) => (
             <PostCard
               key={p.id}
               post={p}
@@ -144,11 +197,13 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
   const [clipSeconds, setClipSeconds] = useState<number | null>(null);
   const [announcement, setAnnouncement] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const [preparingKind, setPreparingKind] = useState<"image" | "video" | null>(null);
 
   const atLimit = usedToday >= limits.postsPerDay;
 
   const pick = async (f: File | null, want: "image" | "video") => {
-    if (!f) return;
+    if (!f || preparing) return;
     if (want === "image" && !limits.canPostImage) {
       toast.error("Photo posts need the Mid or Full plan");
       return;
@@ -157,28 +212,37 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
       toast.error("Video posts need the Full plan");
       return;
     }
-    if (f.size > POST_MEDIA_MAX_BYTES) {
-      toast.error("Files must be under 25MB");
-      return;
-    }
-    let seconds: number | null = null;
-    if (want === "video") {
-      try {
-        const d = await videoDuration(f);
-        seconds = Math.min(Math.round(d), POST_VIDEO_MAX_SECONDS);
-        if (d > POST_VIDEO_MAX_SECONDS) {
-          toast.warning(
-            `That clip is ${Math.round(d)} seconds long — only the first ${POST_VIDEO_MAX_SECONDS} seconds will be posted.`,
-          );
+    setPreparing(true);
+    setPreparingKind(want);
+    try {
+      let preparedFile = f;
+      let seconds: number | null = null;
+      if (want === "image") {
+        if (!f.type.startsWith("image/")) throw new Error("Choose an image file");
+        preparedFile = await compressImageFile(f);
+        if (preparedFile.size > POST_MEDIA_MAX_BYTES) {
+          throw new Error("Compressed images must be under 25MB");
         }
-      } catch {
-        toast.error("Could not read that video");
-        return;
+      } else {
+        if (!f.type.startsWith("video/")) throw new Error("Choose a video file");
+        if (f.size > POST_MEDIA_MAX_BYTES) throw new Error("Videos must be under 25MB");
+        const duration = await videoDuration(f);
+        if (!Number.isFinite(duration) || duration <= 0)
+          throw new Error("Could not read that video");
+        if (duration > POST_VIDEO_MAX_SECONDS) {
+          throw new Error(`Videos must be ${POST_VIDEO_MAX_SECONDS} seconds or shorter`);
+        }
+        seconds = Math.ceil(duration);
       }
+      setFile(preparedFile);
+      setKind(want);
+      setClipSeconds(seconds);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not prepare that file");
+    } finally {
+      setPreparing(false);
+      setPreparingKind(null);
     }
-    setFile(f);
-    setKind(want);
-    setClipSeconds(seconds);
   };
 
   const clearFile = () => {
@@ -207,7 +271,18 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
       let imagePath: string | null = null;
       let videoPath: string | null = null;
       if (file && kind) {
-        const path = await uploadFile("media", user.id, file);
+        if (kind === "video") {
+          if (!file.type.startsWith("video/") || file.size > POST_MEDIA_MAX_BYTES) {
+            throw new Error("Videos must be valid and under 25MB");
+          }
+          const duration = await videoDuration(file);
+          if (!Number.isFinite(duration) || duration <= 0 || duration > POST_VIDEO_MAX_SECONDS) {
+            throw new Error(`Videos must be ${POST_VIDEO_MAX_SECONDS} seconds or shorter`);
+          }
+        }
+        const path = await uploadFile("media", user.id, file, {
+          alreadyCompressed: kind === "image",
+        });
         if (kind === "image") imagePath = path;
         else videoPath = path;
       }
@@ -255,7 +330,7 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
         <div className="mt-3 flex items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-sm">
           <span className="truncate">
             {file.name}
-            {kind === "video" && clipSeconds ? ` · first ${clipSeconds}s` : ""}
+            {kind === "video" && clipSeconds ? ` · ${clipSeconds}s` : ""}
           </span>
           <Button
             variant="ghost"
@@ -267,6 +342,12 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
             <X className="size-4" aria-hidden="true" />
           </Button>
         </div>
+      )}
+
+      {preparing && (
+        <p className="mt-2 text-xs text-muted-foreground" role="status">
+          {preparingKind === "video" ? "Checking video limits…" : "Compressing image…"}
+        </p>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -281,7 +362,12 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
           type="file"
           accept="image/*"
           className="sr-only"
-          onChange={(e) => void pick(e.target.files?.[0] ?? null, "image")}
+          disabled={preparing}
+          onChange={(e) => {
+            const selected = e.currentTarget.files?.[0] ?? null;
+            e.currentTarget.value = "";
+            void pick(selected, "image");
+          }}
         />
         <label
           htmlFor="cmp-vid"
@@ -294,7 +380,12 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
           type="file"
           accept="video/*"
           className="sr-only"
-          onChange={(e) => void pick(e.target.files?.[0] ?? null, "video")}
+          disabled={preparing}
+          onChange={(e) => {
+            const selected = e.currentTarget.files?.[0] ?? null;
+            e.currentTarget.value = "";
+            void pick(selected, "video");
+          }}
         />
 
         {isAdmin && (
@@ -308,7 +399,11 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
           </label>
         )}
 
-        <Button onClick={submit} disabled={busy || atLimit} className="ml-auto min-h-11 px-6">
+        <Button
+          onClick={submit}
+          disabled={busy || preparing || atLimit}
+          className="ml-auto min-h-11 px-6"
+        >
           {busy && <Loader2 className="mr-2 size-4 animate-spin" />}
           Post
         </Button>

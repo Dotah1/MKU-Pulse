@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { BarChart3, Trash2 } from "lucide-react";
+import { BarChart3, Share2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCampus } from "@/hooks/useCampus";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { StoredImage } from "@/components/StoredMedia";
 import { deletePollWithMedia } from "@/lib/media.functions";
 import { timeAgo } from "@/lib/campus";
+import { shareToWhatsApp } from "@/lib/share";
 
 export interface PollRow {
   id: string;
@@ -61,6 +62,16 @@ export function PollCard({
   }, [load]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash !== `#poll-${poll.id}`) return;
+    const frame = window.requestAnimationFrame(() =>
+      document
+        .getElementById(`poll-${poll.id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+    return () => window.cancelAnimationFrame(frame);
+  }, [poll.id]);
+
+  useEffect(() => {
     const channel = supabase
       .channel(`poll-${poll.id}`)
       .on(
@@ -103,11 +114,30 @@ export function PollCard({
   };
 
   return (
-    <article className="rounded-2xl border border-primary/40 bg-primary/5 p-4">
+    <article
+      id={`poll-${poll.id}`}
+      className="scroll-mt-24 rounded-2xl border border-primary/40 bg-primary/5 p-4"
+    >
       <div className="flex items-center gap-2">
         <BarChart3 className="size-4 text-primary" aria-hidden="true" />
         <Badge variant="secondary">Poll</Badge>
         {closed && <Badge variant="outline">Closed</Badge>}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="min-h-11"
+          onClick={() =>
+            void shareToWhatsApp({
+              title: "Campus poll on MKU Pulse",
+              text: `Campus poll: ${poll.question}`,
+              url: `/feed#poll-${poll.id}`,
+            })
+          }
+          aria-label="Share poll to WhatsApp"
+        >
+          <Share2 className="mr-1 size-4 text-emerald-600" aria-hidden="true" />
+          WhatsApp
+        </Button>
         <span className="ml-auto text-xs text-muted-foreground">{timeAgo(poll.created_at)}</span>
         {isAdmin && (
           <Button

@@ -25,6 +25,7 @@ import {
   type Gender,
 } from "@/lib/campus";
 import { savePendingAvatar, uploadPendingAvatar } from "@/lib/pending-avatar";
+import { compressImageFile } from "@/lib/storage";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -182,6 +183,7 @@ function SignupForm() {
   const [gender, setGender] = useState<Gender | "">("");
   const [major, setMajor] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreparing, setPhotoPreparing] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const emailError =
@@ -189,7 +191,7 @@ function SignupForm() {
   const phoneError = phone && !PHONE_RE.test(phone.trim()) ? "Use the format +254XXXXXXXXX" : null;
   const pwError = password ? passwordProblem(password) : null;
 
-  const pickPhoto = (file: File | null) => {
+  const pickPhoto = async (file: File | null) => {
     if (!file) {
       setPhoto(null);
       return;
@@ -198,11 +200,19 @@ function SignupForm() {
       toast.error("Profile picture must be an image");
       return;
     }
-    if (file.size > AVATAR_MAX_BYTES) {
-      toast.error("Profile picture must be 5MB or smaller");
-      return;
+    setPhoto(null);
+    setPhotoPreparing(true);
+    try {
+      const compressed = await compressImageFile(file);
+      if (compressed.size > AVATAR_MAX_BYTES) {
+        throw new Error("Compressed profile picture must be 5MB or smaller");
+      }
+      setPhoto(compressed);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not prepare that photo");
+    } finally {
+      setPhotoPreparing(false);
     }
-    setPhoto(file);
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -248,7 +258,7 @@ function SignupForm() {
 
     // Keep the chosen photo on the device so it is uploaded automatically as
     // soon as there is a session — even when the account needs email confirmation.
-    await savePendingAvatar(photo);
+    await savePendingAvatar(photo, true);
 
     // Storage writes need a session — sign in straight away when sign-up didn't return one.
     let userId = data.session?.user.id ?? null;
@@ -384,7 +394,9 @@ function SignupForm() {
         />
       </div>
       <div>
-        <Label htmlFor="su-photo">Profile picture (required, max 5MB)</Label>
+        <Label htmlFor="su-photo">
+          Profile picture (compressed on device; max 5MB after compression)
+        </Label>
         <label
           htmlFor="su-photo"
           className="mt-1 flex min-h-12 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
@@ -398,11 +410,21 @@ function SignupForm() {
           accept="image/*"
           required
           className="sr-only"
-          onChange={(e) => pickPhoto(e.target.files?.[0] ?? null)}
+          disabled={photoPreparing}
+          onChange={(e) => {
+            const selected = e.currentTarget.files?.[0] ?? null;
+            e.currentTarget.value = "";
+            void pickPhoto(selected);
+          }}
         />
+        {photoPreparing && (
+          <p className="mt-1 text-xs text-muted-foreground" role="status">
+            Compressing photo…
+          </p>
+        )}
       </div>
 
-      <Button type="submit" disabled={busy} className="min-h-12 w-full">
+      <Button type="submit" disabled={busy || photoPreparing} className="min-h-12 w-full">
         {busy && <Loader2 className="mr-2 size-4 animate-spin" />}
         Create account
       </Button>
