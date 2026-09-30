@@ -149,21 +149,39 @@ export function CampusToolsDialog() {
         <section className="space-y-2">
           <h3 className="font-semibold">Official MKU links</h3>
           <a
-            href="https://login.mku.ac.ke/"
+            href="https://studentportal.mku.ac.ke/"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="flex min-h-11 items-center justify-between rounded-lg border border-border px-3 text-sm font-medium transition-colors hover:bg-secondary"
           >
-            Student Portal login{" "}
+            Student Portal{" "}
             <ExternalLink className="size-4 text-muted-foreground" aria-hidden="true" />
           </a>
           <a
-            href="https://portal.mku.ac.ke/"
+            href="https://vlms.mku.ac.ke/"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="flex min-h-11 items-center justify-between rounded-lg border border-border px-3 text-sm font-medium transition-colors hover:bg-secondary"
           >
-            MKU Digital Services Hub{" "}
+            LMS / VLMS learning portal{" "}
+            <ExternalLink className="size-4 text-muted-foreground" aria-hidden="true" />
+          </a>
+          <a
+            href="https://odel.mku.ac.ke/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex min-h-11 items-center justify-between rounded-lg border border-border px-3 text-sm font-medium transition-colors hover:bg-secondary"
+          >
+            MKU ODeL Directorate{" "}
+            <ExternalLink className="size-4 text-muted-foreground" aria-hidden="true" />
+          </a>
+          <a
+            href="https://mku.ac.ke/mpesa-payment/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex min-h-11 items-center justify-between rounded-lg border border-border px-3 text-sm font-medium transition-colors hover:bg-secondary"
+          >
+            Official fee payment instructions{" "}
             <ExternalLink className="size-4 text-muted-foreground" aria-hidden="true" />
           </a>
         </section>

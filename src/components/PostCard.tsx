@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
@@ -419,18 +419,17 @@ export function PostCard({
 }
 
 export function usePostAuthors(posts: PostRow[]) {
-  const ids = useMemo(() => posts.map((p) => p.user_id), [posts]);
+  const ids = useMemo(() => [...new Set(posts.map((post) => post.user_id))], [posts]);
   const [authors, setAuthors] = useState<Record<string, MiniProfile>>({});
+  const requested = useRef(new Set<string>());
   useEffect(() => {
-    if (ids.length === 0) return;
-    let active = true;
+    const missing = ids.filter((id) => !requested.current.has(id));
+    if (missing.length === 0) return;
+    for (const id of missing) requested.current.add(id);
     void import("@/lib/campus-data").then(async ({ fetchProfiles }) => {
-      const map = await fetchProfiles(ids);
-      if (active) setAuthors(map);
+      const map = await fetchProfiles(missing);
+      setAuthors((current) => ({ ...current, ...map }));
     });
-    return () => {
-      active = false;
-    };
   }, [ids]);
   return authors;
 }

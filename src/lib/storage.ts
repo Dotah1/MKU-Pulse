@@ -2,9 +2,94 @@ import { supabase } from "@/integrations/supabase/client";
 
 type CacheEntry = { url: string; expires: number };
 const cache = new Map<string, CacheEntry>();
+const pending = new Map<string, Promise<string | null>>();
+const SIGNED_URL_STORAGE_PREFIX = "mku-pulse:signed-media:v1:";
+const MAX_PERSISTED_SIGNED_URLS = 100;
 const MAX_IMAGE_EDGE = 1200;
 const IMAGE_QUALITY = 0.8;
 const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
+let authGeneration = 0;
+
+function storageKey(key: string) {
+  return `${SIGNED_URL_STORAGE_PREFIX}${encodeURIComponent(key)}`;
+}
+
+function readPersistedUrl(key: string): CacheEntry | null {
+  if (typeof window === "undefined") return null;
+  const itemKey = storageKey(key);
+  try {
+    const raw = window.localStorage.getItem(itemKey);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<CacheEntry>;
+    if (typeof value.url !== "string" || typeof value.expires !== "number") {
+      window.localStorage.removeItem(itemKey);
+      return null;
+    }
+    if (value.expires <= Date.now()) {
+      window.localStorage.removeItem(itemKey);
+      return null;
+    }
+    return { url: value.url, expires: value.expires };
+  } catch {
+    return null;
+  }
+}
+
+function persistUrl(key: string, entry: CacheEntry) {
+  if (typeof window === "undefined") return;
+  try {
+    const storage = window.localStorage;
+    const itemKey = storageKey(key);
+    const entries: { key: string; expires: number }[] = [];
+    const existingKeys = Array.from({ length: storage.length }, (_, index) => storage.key(index));
+    for (const existingKey of existingKeys) {
+      if (!existingKey?.startsWith(SIGNED_URL_STORAGE_PREFIX)) continue;
+      try {
+        const value = JSON.parse(storage.getItem(existingKey) ?? "null") as Partial<CacheEntry>;
+        if (typeof value.expires !== "number" || value.expires <= Date.now()) {
+          storage.removeItem(existingKey);
+        } else {
+          entries.push({ key: existingKey, expires: value.expires });
+        }
+      } catch {
+        storage.removeItem(existingKey);
+      }
+    }
+    if (!storage.getItem(itemKey) && entries.length >= MAX_PERSISTED_SIGNED_URLS) {
+      entries.sort((left, right) => left.expires - right.expires);
+      while (entries.length >= MAX_PERSISTED_SIGNED_URLS) {
+        const oldest = entries.shift();
+        if (oldest) storage.removeItem(oldest.key);
+      }
+    }
+    storage.setItem(itemKey, JSON.stringify(entry));
+  } catch {
+    // Storage may be disabled or full; the in-memory cache remains available.
+  }
+}
+
+function clearSignedUrlCache() {
+  authGeneration += 1;
+  cache.clear();
+  pending.clear();
+  if (typeof window === "undefined") return;
+  try {
+    const keys: string[] = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key?.startsWith(SIGNED_URL_STORAGE_PREFIX)) keys.push(key);
+    }
+    for (const key of keys) window.localStorage.removeItem(key);
+  } catch {
+    // Ignore unavailable browser storage.
+  }
+}
+
+if (typeof window !== "undefined") {
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_IN" || event === "SIGNED_OUT") clearSignedUrlCache();
+  });
+}
 
 /** Resolve a private-bucket object path into a temporary signed URL. */
 export async function getSignedUrl(
@@ -15,11 +100,36 @@ export async function getSignedUrl(
   const key = `${bucket}/${path}`;
   const hit = cache.get(key);
   if (hit && hit.expires > Date.now()) return hit.url;
+  if (hit) cache.delete(key);
 
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60 * 6);
-  if (error || !data?.signedUrl) return null;
-  cache.set(key, { url: data.signedUrl, expires: Date.now() + 60 * 60 * 5 * 1000 });
-  return data.signedUrl;
+  const persisted = readPersistedUrl(key);
+  if (persisted) {
+    cache.set(key, persisted);
+    return persisted.url;
+  }
+  const inFlight = pending.get(key);
+  if (inFlight) return inFlight;
+
+  const generation = authGeneration;
+  const request = (async () => {
+    try {
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(path, 60 * 60 * 6);
+      if (error || !data?.signedUrl || generation !== authGeneration) return null;
+      const entry = { url: data.signedUrl, expires: Date.now() + 60 * 60 * 5 * 1000 };
+      cache.set(key, entry);
+      persistUrl(key, entry);
+      return entry.url;
+    } catch {
+      return null;
+    }
+  })();
+  pending.set(key, request);
+  void request.finally(() => {
+    if (pending.get(key) === request) pending.delete(key);
+  });
+  return request;
 }
 
 function canvasBlob(

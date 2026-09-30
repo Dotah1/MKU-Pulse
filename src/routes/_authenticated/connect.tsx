@@ -47,6 +47,7 @@ interface MatchRow {
 type SwipeAction = "like" | "pass" | "super_like";
 type ChangeableSwipeAction = "like" | "pass";
 type ConnectTab = "discover" | "matches" | "history";
+const CANDIDATE_PAGE_SIZE = 20;
 
 interface SwipeRow {
   swipee_id: string;
@@ -60,6 +61,8 @@ function ConnectPage() {
   const [tab, setTab] = useState<ConnectTab>("discover");
   const [deck, setDeck] = useState<MiniProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMoreCandidates, setLoadingMoreCandidates] = useState(false);
+  const [hasMoreCandidates, setHasMoreCandidates] = useState(true);
   const [swipesToday, setSwipesToday] = useState(0);
   const [superToday, setSuperToday] = useState(0);
   const [matches, setMatches] = useState<MatchRow[]>([]);
@@ -71,16 +74,30 @@ function ConnectPage() {
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const suppressClick = useRef(false);
+  const candidateOffset = useRef(0);
+  const seenProfileIds = useRef(new Set<string>());
+  const queuedProfileIds = useRef(new Set<string>());
 
   const loadDeck = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const { data: swiped } = await supabase
+    setHasMoreCandidates(true);
+    candidateOffset.current = 0;
+    queuedProfileIds.current = new Set<string>();
+    const { data: swiped, error: swipeError } = await supabase
       .from("swipes")
       .select("swipee_id, action, created_at")
       .eq("swiper_id", user.id);
+    if (swipeError) {
+      toast.error(swipeError.message);
+      setDeck([]);
+      setHasMoreCandidates(false);
+      setLoading(false);
+      return;
+    }
     const seen = new Set((swiped ?? []).map((s) => s.swipee_id as string));
     seen.add(user.id);
+    seenProfileIds.current = seen;
 
     // Only show the opposite gender.
     const wanted =
@@ -94,12 +111,23 @@ function ConnectPage() {
       .eq("is_banned", false)
       .eq("is_private", false);
     if (wanted) query = query.eq("gender", wanted);
-    const { data } = await query.limit(200);
+    const { data, error } = await query
+      .order("id", { ascending: true })
+      .range(0, CANDIDATE_PAGE_SIZE - 1);
+    if (error) {
+      toast.error(error.message);
+      setDeck([]);
+      setHasMoreCandidates(false);
+      setLoading(false);
+      return;
+    }
 
-    const list = ((data ?? []) as (MiniProfile & { is_banned: boolean })[]).filter(
-      (person) => !seen.has(person.id),
-    );
-    setDeck(list.sort(() => Math.random() - 0.5).slice(0, 40));
+    const rows = (data ?? []) as (MiniProfile & { is_banned: boolean })[];
+    candidateOffset.current = rows.length;
+    const list = rows.filter((person) => !seen.has(person.id));
+    queuedProfileIds.current = new Set(list.map((person) => person.id));
+    setDeck(list.sort(() => Math.random() - 0.5));
+    setHasMoreCandidates(rows.length === CANDIDATE_PAGE_SIZE);
     setSwipesToday(await countToday("swipes", "swiper_id", user.id));
     const supers = (swiped ?? []).filter(
       (swipe) =>
@@ -109,6 +137,43 @@ function ConnectPage() {
     setSuperToday(supers);
     setLoading(false);
   }, [user, profile?.gender]);
+
+  const loadMoreCandidates = async () => {
+    if (!user || loadingMoreCandidates || !hasMoreCandidates) return;
+    setLoadingMoreCandidates(true);
+    const wanted =
+      profile?.gender === "male" ? "female" : profile?.gender === "female" ? "male" : null;
+    let query = supabase
+      .from("profiles")
+      .select(
+        "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_banned, is_private",
+      )
+      .eq("is_banned", false)
+      .eq("is_private", false);
+    if (wanted) query = query.eq("gender", wanted);
+    const offset = candidateOffset.current;
+    try {
+      const { data, error } = await query
+        .order("id", { ascending: true })
+        .range(offset, offset + CANDIDATE_PAGE_SIZE - 1);
+      if (error) throw error;
+      const rows = (data ?? []) as (MiniProfile & { is_banned: boolean })[];
+      candidateOffset.current = offset + rows.length;
+      setHasMoreCandidates(rows.length === CANDIDATE_PAGE_SIZE);
+      const next = rows
+        .filter(
+          (person) =>
+            !seenProfileIds.current.has(person.id) && !queuedProfileIds.current.has(person.id),
+        )
+        .sort(() => Math.random() - 0.5);
+      for (const person of next) queuedProfileIds.current.add(person.id);
+      setDeck((currentDeck) => [...currentDeck, ...next]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load more candidates");
+    } finally {
+      setLoadingMoreCandidates(false);
+    }
+  };
 
   const loadMatches = useCallback(async () => {
     if (!user) return;
@@ -181,6 +246,7 @@ function ConnectPage() {
       toast.error(error.message);
       return;
     }
+    seenProfileIds.current.add(current.id);
     setSwipesToday((count) => count + 1);
     if (action === "super_like") setSuperToday((count) => count + 1);
     if (action !== "pass") {
@@ -327,9 +393,27 @@ function ConnectPage() {
               {loading ? (
                 <Loader2 className="my-16 size-6 animate-spin text-muted-foreground" />
               ) : !current ? (
-                <p className="my-16 max-w-sm text-center text-sm text-muted-foreground">
-                  You've seen everyone for now. Check back later as more students join.
-                </p>
+                <div className="my-16 flex max-w-sm flex-col items-center gap-3 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {hasMoreCandidates
+                      ? "You’ve reached the end of this batch. Load another group of students."
+                      : "You've seen everyone for now. Check back later as more students join."}
+                  </p>
+                  {hasMoreCandidates && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-11"
+                      onClick={() => void loadMoreCandidates()}
+                      disabled={loadingMoreCandidates}
+                    >
+                      {loadingMoreCandidates && (
+                        <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                      )}
+                      {loadingMoreCandidates ? "Loading candidates…" : "Load more candidates"}
+                    </Button>
+                  )}
+                </div>
               ) : (
                 <div
                   className="relative w-full max-w-sm touch-pan-y select-none overflow-hidden rounded-3xl border border-border bg-card shadow-sm"

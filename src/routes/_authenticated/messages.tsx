@@ -97,6 +97,7 @@ function MessagesPage() {
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [people, setPeople] = useState<Record<string, MiniProfile>>({});
   const [loading, setLoading] = useState(true);
+  const loadedContext = useRef<string | null | undefined>(undefined);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -111,21 +112,11 @@ function MessagesPage() {
   }, [user]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    if (!user) return;
-    const channel = supabase
-      .channel(`inbox-${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
-        void load();
-      })
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [user, load]);
+    const context = `${user?.id ?? "no-user"}:${c ?? "inbox"}`;
+    if (loadedContext.current === context) return;
+    loadedContext.current = context;
+    if (!c || !conversations.some((conversation) => conversation.id === c)) void load();
+  }, [c, conversations, load, user?.id]);
 
   useEffect(() => {
     if (!user || !p || c) return;

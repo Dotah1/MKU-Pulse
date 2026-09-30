@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Image as ImageIcon, Loader2, Video, X } from "lucide-react";
@@ -25,6 +25,7 @@ const FEED_FILTERS = [
 ] as const;
 
 type FeedFilter = (typeof FEED_FILTERS)[number]["id"];
+const POSTS_PAGE_SIZE = 20;
 
 function postMatchesFilter(content: string, filter: FeedFilter): boolean {
   if (filter === "all") return true;
@@ -61,15 +62,22 @@ function FeedPage() {
   const [polls, setPolls] = useState<PollRow[]>([]);
   const [pollOptions, setPollOptions] = useState<Record<string, PollOptionRow[]>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false);
+  const [hasMorePosts, setHasMorePosts] = useState(true);
   const [usedToday, setUsedToday] = useState(0);
   const [activeFilter, setActiveFilter] = useState<FeedFilter>("all");
+  const postsOffset = useRef(0);
+  const feedGeneration = useRef(0);
   const authors = usePostAuthors(posts);
   const filteredPosts = useMemo(
     () => posts.filter((post) => postMatchesFilter(post.content, activeFilter)),
     [posts, activeFilter],
   );
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    const generation = ++feedGeneration.current;
+    setLoading(true);
+    postsOffset.current = 0;
     const [{ data, error }, pollData] = await Promise.all([
       supabase
         .from("posts")
@@ -78,24 +86,63 @@ function FeedPage() {
         )
         .order("is_announcement", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(60),
+        .range(0, POSTS_PAGE_SIZE - 1),
       fetchFeedPolls(),
     ]);
-    if (error) toast.error(error.message);
-    setPosts((data ?? []) as PostRow[]);
+    if (generation !== feedGeneration.current) return;
+    if (error) {
+      toast.error(error.message);
+      setPosts([]);
+      setHasMorePosts(false);
+    } else {
+      const rows = (data ?? []) as PostRow[];
+      setPosts(rows);
+      postsOffset.current = rows.length;
+      setHasMorePosts(rows.length === POSTS_PAGE_SIZE);
+    }
     setPolls(pollData.polls);
     setPollOptions(pollData.options);
     setLoading(false);
+  }, []);
+
+  const loadMorePosts = async () => {
+    if (loadingMorePosts || !hasMorePosts) return;
+    setLoadingMorePosts(true);
+    const generation = feedGeneration.current;
+    const offset = postsOffset.current;
+    try {
+      const { data, error } = await supabase
+        .from("posts")
+        .select(
+          "id, user_id, content, image_url, video_url, video_seconds, is_announcement, created_at",
+        )
+        .order("is_announcement", { ascending: false })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + POSTS_PAGE_SIZE - 1);
+      if (generation !== feedGeneration.current) return;
+      if (error) throw error;
+      const rows = (data ?? []) as PostRow[];
+      postsOffset.current = offset + rows.length;
+      setPosts((current) => {
+        const ids = new Set(current.map((post) => post.id));
+        return [...current, ...rows.filter((post) => !ids.has(post.id))];
+      });
+      setHasMorePosts(rows.length === POSTS_PAGE_SIZE);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load more posts");
+    } finally {
+      setLoadingMorePosts(false);
+    }
   };
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (!user) return;
     void countToday("posts", "user_id", user.id).then(setUsedToday);
-  }, [user, posts.length]);
+  }, [user]);
 
   const blockedUntil = profile?.post_block_until ?? null;
   const blocked = blockedUntil ? new Date(blockedUntil).getTime() > Date.now() : false;
@@ -140,6 +187,7 @@ function FeedPage() {
         <Composer
           onPosted={() => {
             void load();
+            if (user) void countToday("posts", "user_id", user.id).then(setUsedToday);
           }}
           usedToday={usedToday}
         />
@@ -174,9 +222,29 @@ function FeedPage() {
               key={p.id}
               post={p}
               author={authors[p.user_id]}
-              onDeleted={(id) => setPosts((list) => list.filter((x) => x.id !== id))}
+              onDeleted={(id) => {
+                postsOffset.current = Math.max(0, postsOffset.current - 1);
+                setPosts((list) => list.filter((post) => post.id !== id));
+              }}
             />
           ))}
+        </div>
+      )}
+
+      {!loading && hasMorePosts && (
+        <div className="flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            onClick={() => void loadMorePosts()}
+            disabled={loadingMorePosts}
+          >
+            {loadingMorePosts && (
+              <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+            )}
+            {loadingMorePosts ? "Loading posts…" : "Load more posts"}
+          </Button>
         </div>
       )}
 
