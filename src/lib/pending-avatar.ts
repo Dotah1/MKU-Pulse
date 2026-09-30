@@ -29,29 +29,38 @@ async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => I
   });
 }
 
-export async function savePendingAvatar(file: File): Promise<void> {
+export async function savePendingAvatar(file: File, alreadyCompressed = false): Promise<void> {
   if (typeof indexedDB === "undefined") return;
   try {
     await tx(
       "readwrite",
       (s) =>
-        s.put({ blob: file, name: file.name, type: file.type }, KEY) as IDBRequest<IDBValidKey>,
+        s.put(
+          { blob: file, name: file.name, type: file.type, alreadyCompressed },
+          KEY,
+        ) as IDBRequest<IDBValidKey>,
     );
   } catch {
     /* storing the photo locally is best-effort */
   }
 }
 
-export async function takePendingAvatar(): Promise<File | null> {
+export async function takePendingAvatar(): Promise<{
+  file: File;
+  alreadyCompressed: boolean;
+} | null> {
   if (typeof indexedDB === "undefined") return null;
   try {
-    const row = await tx<{ blob: Blob; name: string; type: string } | undefined>("readonly", (s) =>
-      s.get(KEY),
-    );
+    const row = await tx<
+      { blob: Blob; name: string; type: string; alreadyCompressed?: boolean } | undefined
+    >("readonly", (s) => s.get(KEY));
     if (!row?.blob) return null;
-    return new File([row.blob], row.name || "avatar.jpg", {
-      type: row.type || row.blob.type || "image/jpeg",
-    });
+    return {
+      file: new File([row.blob], row.name || "avatar.jpg", {
+        type: row.type || row.blob.type || "image/jpeg",
+      }),
+      alreadyCompressed: Boolean(row.alreadyCompressed),
+    };
   } catch {
     return null;
   }
@@ -73,10 +82,12 @@ export async function clearPendingAvatar(): Promise<void> {
 export async function uploadPendingAvatar(userId: string): Promise<boolean> {
   const { supabase } = await import("@/integrations/supabase/client");
   const { uploadFile } = await import("@/lib/storage");
-  const file = await takePendingAvatar();
-  if (!file) return false;
+  const pending = await takePendingAvatar();
+  if (!pending) return false;
   try {
-    const path = await uploadFile("avatars", userId, file);
+    const path = await uploadFile("avatars", userId, pending.file, {
+      alreadyCompressed: pending.alreadyCompressed,
+    });
     const { error } = await supabase.from("profiles").update({ avatar_url: path }).eq("id", userId);
     if (error) throw error;
     await clearPendingAvatar();

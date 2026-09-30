@@ -547,6 +547,23 @@ function ChatPane({
         </div>
       )}
 
+      <div className="border-t border-border px-3 pt-2" aria-label="Campus slang quick replies">
+        <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Campus quick replies</p>
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {["Form ni gani?", "Comrades!", "Niko Main Campus", "Library"].map((reply) => (
+            <button
+              key={reply}
+              type="button"
+              disabled={sending}
+              onClick={() => onType(`${draft}${draft && !/\s$/.test(draft) ? " " : ""}${reply}`)}
+              className="min-h-9 shrink-0 rounded-full border border-border bg-background px-3 text-xs font-medium transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary disabled:pointer-events-none disabled:opacity-50"
+            >
+              {reply}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="flex items-end gap-2 border-t border-border p-3">
         <Textarea
           value={draft}

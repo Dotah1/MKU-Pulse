@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Reply,
   Send,
+  Share2,
   Trash2,
   Flag,
   Megaphone,
@@ -28,6 +29,7 @@ import {
 import { timeAgo, sanitizeText } from "@/lib/campus";
 import { deletePostWithMedia } from "@/lib/media.functions";
 import { getOrCreateConversation, type MiniProfile } from "@/lib/campus-data";
+import { shareToWhatsApp } from "@/lib/share";
 
 export interface PostRow {
   id: string;
@@ -303,6 +305,22 @@ export function PostCard({
             Message
           </Button>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="min-h-11"
+          onClick={() =>
+            void shareToWhatsApp({
+              title: "Campus post on MKU Pulse",
+              text: post.content.trim().slice(0, 180) || "Check out this campus post on MKU Pulse.",
+              url: `/p/${post.id}`,
+            })
+          }
+          aria-label="Share post to WhatsApp"
+        >
+          <Share2 className="mr-1 size-4 text-emerald-600" aria-hidden="true" />
+          WhatsApp
+        </Button>
         <div className="ml-auto flex items-center">
           {!mine && (
             <Button
