@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Image as ImageIcon, Loader2, Video, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,30 +17,88 @@ import { compressImageFile, uploadFile, videoDuration } from "@/lib/storage";
 import { countToday } from "@/lib/campus-data";
 
 const FEED_FILTERS = [
-  { id: "all", label: "#All" },
-  { id: "trending", label: "#Trending" },
-  { id: "lost-and-found", label: "#LostAndFound" },
-  { id: "confessions", label: "#Confessions" },
-  { id: "hostel-vibes", label: "#HostelVibes" },
+  { id: "all", label: "🔥 All Posts" },
+  { id: "soko", label: "🛒 MKU Soko", tag: "#MKUSoko" },
+  { id: "hostels", label: "🏠 Hostels & Roommates", tag: "#HostelVibes" },
+  { id: "lost-and-found", label: "🔍 Lost & Found", tag: "#LostAndFound" },
+  { id: "confessions", label: "🤫 Confessions", tag: "#Confessions" },
+  { id: "trending", label: "📈 Trending", tag: "#Trending" },
 ] as const;
 
 type FeedFilter = (typeof FEED_FILTERS)[number]["id"];
 const POSTS_PAGE_SIZE = 20;
+const RECENT_POSTS_KEY = "mku_recent_posts";
+
+interface RecentPostDraft {
+  id: string;
+  content: string;
+  created_at: number;
+}
+
+const COMPOSER_CATEGORIES = [
+  { id: "soko", label: "🛒 MKU Soko", tag: "#MKUSoko" },
+  { id: "hostels", label: "🏠 Hostel", tag: "#HostelVibes" },
+  { id: "lost-and-found", label: "🔍 Lost & Found", tag: "#LostAndFound" },
+  { id: "confessions", label: "🤫 Confession", tag: "#Confessions" },
+] as const;
+
+type ComposerCategory = (typeof COMPOSER_CATEGORIES)[number]["id"];
+
+function readRecentPostDrafts(): RecentPostDraft[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(RECENT_POSTS_KEY) ?? "[]");
+    if (!Array.isArray(value)) return [];
+    return (value as Partial<RecentPostDraft>[])
+      .filter(
+        (draft): draft is RecentPostDraft =>
+          typeof draft.id === "string" &&
+          typeof draft.content === "string" &&
+          typeof draft.created_at === "number" &&
+          Number.isFinite(draft.created_at) &&
+          Math.abs(draft.created_at) < 8.64e15,
+      )
+      .sort((a, b) => b.created_at - a.created_at)
+      .slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentPostDraft(content: string) {
+  if (typeof window === "undefined") return;
+  const createdAt = Date.now();
+  const id =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${createdAt}-${Math.random().toString(36).slice(2)}`;
+  const drafts = [{ id, content, created_at: createdAt }, ...readRecentPostDrafts()].slice(0, 5);
+  try {
+    window.localStorage.setItem(RECENT_POSTS_KEY, JSON.stringify(drafts));
+  } catch {
+    // Publishing should still succeed when browser storage is full or disabled.
+  }
+}
 
 function postMatchesFilter(content: string, filter: FeedFilter): boolean {
   if (filter === "all") return true;
-  const text = content.toLowerCase();
   const patterns: Record<Exclude<FeedFilter, "all">, RegExp> = {
-    trending: /#trending\b|\btrending\b|\bviral\b/i,
+    soko: /#mkusoko\b|#soko\b|\bselling\b|\bfor sale\b|\bkes\s*\d+/i,
+    hostels:
+      /#hostelvibes\b|#hostels?\b|\broommates?\b|\bbedsitters?\b|\blandless\b|\bsection 9\b/i,
     "lost-and-found":
-      /#lostandfound\b|#lost\b|#found\b|\blost\s+and\s+found\b|\b(?:lost|found)\s+(?:item|keys?|phone|wallet|id|card|book|bag)\b/i,
-    confessions: /#confessions?\b|\bconfessions?\b/i,
-    "hostel-vibes": /#hostelvibes\b|\bhostel(?:\s+vibes)?\b|\broommates?\b|\bdorm\b/i,
+      /#lostandfound\b|#lost\b|#found\b|\b(?:lost|found)\s+(?:item|keys?|id|card|phone|wallet|calculator)\b/i,
+    confessions: /#confessions?\b|\bconfession\b/i,
+    trending: /#trending\b|\bviral\b/i,
   };
-  return patterns[filter].test(text);
+  return patterns[filter].test(content);
 }
 
 export const Route = createFileRoute("/_authenticated/feed")({
+  validateSearch: (search: Record<string, unknown>): { relist?: string | undefined } => {
+    const relist = search["relist"];
+    return typeof relist === "string" ? { relist: relist.slice(0, 1000) } : {};
+  },
   head: () => ({
     meta: [
       { title: "Campus feed — MKU Pulse" },
@@ -58,6 +116,7 @@ export const Route = createFileRoute("/_authenticated/feed")({
 
 function FeedPage() {
   const { user, profile, isAdmin, limits, tier } = useCampus();
+  const { relist } = Route.useSearch();
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [polls, setPolls] = useState<PollRow[]>([]);
   const [pollOptions, setPollOptions] = useState<Record<string, PollOptionRow[]>>({});
@@ -185,6 +244,7 @@ function FeedPage() {
 
       {!blocked && (
         <Composer
+          relistContent={relist}
           onPosted={() => {
             void load();
             if (user) void countToday("posts", "user_id", user.id).then(setUsedToday);
@@ -257,9 +317,19 @@ function FeedPage() {
   );
 }
 
-function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: number }) {
+function Composer({
+  onPosted,
+  usedToday,
+  relistContent,
+}: {
+  onPosted: () => void;
+  usedToday: number;
+  relistContent: string | undefined;
+}) {
   const { user, profile, isAdmin, limits } = useCampus();
-  const [content, setContent] = useState("");
+  const navigate = useNavigate();
+  const [content, setContent] = useState(relistContent ?? "");
+  const [activeCategory, setActiveCategory] = useState<ComposerCategory | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [kind, setKind] = useState<"image" | "video" | null>(null);
   const [clipSeconds, setClipSeconds] = useState<number | null>(null);
@@ -269,6 +339,15 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
   const [preparingKind, setPreparingKind] = useState<"image" | "video" | null>(null);
 
   const atLimit = usedToday >= limits.postsPerDay;
+
+  useEffect(() => {
+    if (relistContent === undefined) return;
+    setContent(relistContent);
+    setActiveCategory(
+      COMPOSER_CATEGORIES.find((category) => relistContent.includes(category.tag))?.id ?? null,
+    );
+    void navigate({ to: "/feed", search: { relist: undefined }, replace: true });
+  }, [navigate, relistContent]);
 
   const pick = async (f: File | null, want: "image" | "video") => {
     if (!f || preparing) return;
@@ -319,6 +398,24 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
     setClipSeconds(null);
   };
 
+  const selectCategory = (category: (typeof COMPOSER_CATEGORIES)[number]) => {
+    setActiveCategory(category.id);
+    setContent((current) => {
+      if (current.toLowerCase().includes(category.tag.toLowerCase())) return current;
+      const trimmed = current.trimEnd();
+      const next = `${trimmed}${trimmed ? "\n" : ""}${category.tag}`;
+      return next.length <= 1000 ? next : current;
+    });
+  };
+
+  const addPricePrompt = () => {
+    setContent((current) => {
+      const trimmed = current.trimEnd();
+      const next = `${trimmed}${trimmed ? "\n" : ""}Price: KES `;
+      return next.length <= 1000 ? next : current;
+    });
+  };
+
   const submit = async () => {
     if (!user) return;
     const text = sanitizeText(content, 1000);
@@ -363,7 +460,9 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
         is_announcement: isAdmin ? announcement : false,
       });
       if (error) throw error;
+      saveRecentPostDraft(text);
       setContent("");
+      setActiveCategory(null);
       clearFile();
       setAnnouncement(false);
       toast.success("Posted");
@@ -392,6 +491,33 @@ function Composer({ onPosted, usedToday }: { onPosted: () => void; usedToday: nu
           aria-label="Post content"
           className="resize-none"
         />
+      </div>
+
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Post category">
+        {COMPOSER_CATEGORIES.map((category) => (
+          <Button
+            key={category.id}
+            type="button"
+            size="sm"
+            variant={activeCategory === category.id ? "default" : "outline"}
+            aria-pressed={activeCategory === category.id}
+            className="min-h-10 shrink-0 rounded-full"
+            onClick={() => selectCategory(category)}
+          >
+            {category.label}
+          </Button>
+        ))}
+        {activeCategory === "soko" && (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="min-h-10 shrink-0 rounded-full"
+            onClick={addPricePrompt}
+          >
+            + Add Price (KES)
+          </Button>
+        )}
       </div>
 
       {file && (

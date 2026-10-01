@@ -42,6 +42,35 @@ export interface PostRow {
   created_at: string;
 }
 
+const POST_CATEGORY_RULES = [
+  {
+    pattern: /#mkusoko\b|#soko\b|\bselling\b|\bfor sale\b|\bkes\s*\d+/i,
+    label: "🛒 MKU Soko",
+    className:
+      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
+  },
+  {
+    pattern:
+      /#hostelvibes\b|#hostels?\b|\broommates?\b|\bbedsitters?\b|\blandless\b|\bsection 9\b/i,
+    label: "🏠 Hostel / Roommate",
+    className:
+      "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300",
+  },
+  {
+    pattern:
+      /#lostandfound\b|#lost\b|#found\b|\b(?:lost|found)\s+(?:item|keys?|id|card|phone|wallet|calculator)\b/i,
+    label: "🔍 Lost & Found",
+    className:
+      "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
+  },
+  {
+    pattern: /#confessions?\b|\bconfession\b/i,
+    label: "🤫 Confession",
+    className:
+      "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-900 dark:bg-purple-950/40 dark:text-purple-300",
+  },
+] as const;
+
 interface Comment {
   id: string;
   user_id: string;
@@ -217,6 +246,9 @@ export function PostCard({
   const name = author?.full_name || "Student";
   const threads = comments.filter((c) => !c.parent_id);
   const repliesOf = (id: string) => comments.filter((c) => c.parent_id === id);
+  const category = POST_CATEGORY_RULES.find((rule) => rule.pattern.test(post.content));
+  const price = post.content.match(/(?:KES|Ksh)\s*[\d,]+/i)?.[0];
+  const priceLabel = price?.replace(/^(?:KES|Ksh)\s*/i, "KES ");
 
   const commentRow = (c: Comment, isReply: boolean) => (
     <div key={c.id} className={isReply ? "ml-10 flex gap-2" : "flex gap-2"}>
@@ -270,6 +302,21 @@ export function PostCard({
           </Badge>
         )}
       </div>
+
+      {(category || priceLabel) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {category && (
+            <Badge variant="outline" className={`font-semibold ${category.className}`}>
+              {category.label}
+            </Badge>
+          )}
+          {priceLabel && (
+            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
+              {priceLabel}
+            </span>
+          )}
+        </div>
+      )}
 
       {post.content && <p className="mt-3 whitespace-pre-wrap text-sm">{post.content}</p>}
       {post.image_url && (

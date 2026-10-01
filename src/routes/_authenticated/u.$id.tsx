@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ArrowLeft, GraduationCap, Loader2, MessageCircle, Star } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  GraduationCap,
+  Loader2,
+  MessageCircle,
+  RotateCcw,
+  Star,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCampus } from "@/hooks/useCampus";
 import { PostCard, type PostRow } from "@/components/PostCard";
@@ -42,12 +50,39 @@ interface PublicProfile {
   is_private: boolean;
 }
 
+interface LocalRecentPost {
+  id: string;
+  content: string;
+  created_at: number;
+}
+
+function readLocalRecentPosts(): LocalRecentPost[] {
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem("mku_recent_posts") ?? "[]");
+    if (!Array.isArray(value)) return [];
+    return (value as Partial<LocalRecentPost>[])
+      .filter(
+        (draft): draft is LocalRecentPost =>
+          typeof draft.id === "string" &&
+          typeof draft.content === "string" &&
+          typeof draft.created_at === "number" &&
+          Number.isFinite(draft.created_at) &&
+          Math.abs(draft.created_at) < 8.64e15,
+      )
+      .sort((a, b) => b.created_at - a.created_at)
+      .slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
 function PublicProfilePage() {
   const { id } = useParams({ from: "/_authenticated/u/$id" });
   const { user } = useCampus();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [posts, setPosts] = useState<PostRow[]>([]);
+  const [recentPosts, setRecentPosts] = useState<LocalRecentPost[]>([]);
   const [isMentor, setIsMentor] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -83,6 +118,14 @@ function PublicProfilePage() {
       active = false;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!mine || typeof window === "undefined") {
+      setRecentPosts([]);
+      return;
+    }
+    setRecentPosts(readLocalRecentPosts());
+  }, [mine, id]);
 
   const message = async () => {
     if (!user || mine) return;
@@ -189,6 +232,45 @@ function PublicProfilePage() {
           </div>
         </div>
       </header>
+
+      {mine && recentPosts.length > 0 && (
+        <details className="rounded-2xl border border-border bg-card">
+          <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 p-4 font-semibold [&::-webkit-details-marker]:hidden">
+            <span>Expired or Unsold Posts (Saved Locally)</span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </summary>
+          <div className="space-y-3 px-4 pb-4">
+            <p className="text-sm text-muted-foreground">
+              Posts expire after 24 hours to keep the feed fresh. Have an unsold item or vacant
+              room?
+            </p>
+            {recentPosts.map((draft) => (
+              <div
+                key={draft.id}
+                className="flex flex-col gap-3 rounded-xl border border-border p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-3 whitespace-pre-wrap text-sm">
+                    {draft.content || "No text content was saved for this post."}
+                  </p>
+                  <time
+                    className="mt-1 block text-xs text-muted-foreground"
+                    dateTime={new Date(draft.created_at).toISOString()}
+                  >
+                    Saved {new Date(draft.created_at).toLocaleString()}
+                  </time>
+                </div>
+                <Button
+                  className="min-h-11 shrink-0"
+                  onClick={() => void navigate({ to: "/feed", search: { relist: draft.content } })}
+                >
+                  <RotateCcw className="mr-2 size-4" aria-hidden="true" /> Relist Post
+                </Button>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       <section className="space-y-4">
         <h2 className="font-display text-lg font-bold">Posts</h2>
