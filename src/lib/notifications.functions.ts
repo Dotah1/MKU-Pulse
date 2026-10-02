@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ADMIN_EMAIL } from "@/lib/campus";
+import { createAnnouncementUrl } from "@/lib/announcement";
 
 export interface FirebaseWebConfig {
   apiKey: string;
@@ -513,18 +514,32 @@ export const notifyUser = createServerFn({ method: "POST" })
 /** Creates in-app-only announcement records for all students; it never sends device push. */
 export const broadcastAnnouncement = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { title: string; body: string }) => {
-    const title = clean(input?.title, 80);
-    const body = clean(input?.body, 1000);
-    if (!title) throw new Error("An announcement title is required");
-    if (!body) throw new Error("An announcement message is required");
-    return { title, body };
-  })
+  .validator(
+    (input: { title: string; body: string; imagePath?: string | null; durationHours?: number }) => {
+      const title = clean(input?.title, 80);
+      const body = clean(input?.body, 1000);
+      const imagePath = clean(input?.imagePath, 512) || null;
+      const durationHours = Number(input?.durationHours ?? 24);
+      if (!title) throw new Error("An announcement title is required");
+      if (!body) throw new Error("An announcement message is required");
+      if (!Number.isInteger(durationHours) || durationHours < 1 || durationHours > 168) {
+        throw new Error("Announcement duration must be between 1 and 168 hours");
+      }
+      return { title, body, imagePath, durationHours };
+    },
+  )
   .handler(async ({ data, context }) => {
     const email = String(context.claims["email"] ?? "").toLowerCase();
     if (email !== ADMIN_EMAIL.toLowerCase()) throw new Error("Forbidden: admin access required");
+    if (data.imagePath && !data.imagePath.startsWith(`${context.userId}/`)) {
+      throw new Error("Announcement image must be uploaded to your own media folder");
+    }
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const announcementUrl = createAnnouncementUrl(
+      data.imagePath,
+      Date.now() + data.durationHours * 3_600_000,
+    );
     const recipientIds: string[] = [];
     const pageSize = 1000;
     let offset = 0;
@@ -548,7 +563,7 @@ export const broadcastAnnouncement = createServerFn({ method: "POST" })
         kind: "announcement",
         title: data.title,
         body: data.body,
-        url: "/feed",
+        url: announcementUrl,
       }));
       const { error } = await supabaseAdmin.from("notifications").insert(rows);
       if (error) throw new Error(error.message);

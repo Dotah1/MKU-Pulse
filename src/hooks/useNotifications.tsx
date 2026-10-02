@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCampus } from "@/hooks/useCampus";
+import { isAnnouncementExpired } from "@/lib/announcement";
 
 export interface AppNotification {
   id: string;
@@ -16,11 +17,15 @@ export interface AppNotification {
 export function useNotifications(limit = 30) {
   const { user } = useCampus();
   const [items, setItems] = useState<AppNotification[]>([]);
+  const [itemsOwnerId, setItemsOwnerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadRequestId = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = ++loadRequestId.current;
     if (!user) {
       setItems([]);
+      setItemsOwnerId(null);
       setLoading(false);
       return;
     }
@@ -30,7 +35,14 @@ export function useNotifications(limit = 30) {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(limit);
-    setItems((data ?? []) as AppNotification[]);
+    if (requestId !== loadRequestId.current) return;
+    setItems(
+      ((data ?? []) as AppNotification[]).filter(
+        (notification) =>
+          notification.kind !== "announcement" || !isAnnouncementExpired(notification.url),
+      ),
+    );
+    setItemsOwnerId(user.id);
     setLoading(false);
   }, [user, limit]);
 
@@ -58,6 +70,20 @@ export function useNotifications(limit = 30) {
     };
   }, [user, load]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setItems((current) =>
+        current.filter(
+          (notification) =>
+            notification.kind !== "announcement" || !isAnnouncementExpired(notification.url),
+        ),
+      );
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const visibleItems = itemsOwnerId === (user?.id ?? null) ? items : [];
+
   const markRead = useCallback(async (id: string) => {
     setItems((list) =>
       list.map((n) => (n.id === id ? { ...n, read_at: n.read_at ?? new Date().toISOString() } : n)),
@@ -77,9 +103,9 @@ export function useNotifications(limit = 30) {
   }, [user]);
 
   return {
-    items,
+    items: visibleItems,
     loading,
-    unreadCount: items.filter((n) => !n.read_at).length,
+    unreadCount: visibleItems.filter((n) => !n.read_at).length,
     reload: load,
     markRead,
     markAllRead,

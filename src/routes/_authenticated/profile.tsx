@@ -36,6 +36,8 @@ import {
   disableOneSignalBroadcasts,
   enableOneSignalBroadcasts,
   isOneSignalBroadcastsEnabled,
+  suppressOneSignalPrompt,
+  clearOneSignalPromptSuppression,
 } from "@/lib/onesignal";
 import { checkAndUpdateStreak, checkInServerStreak } from "@/lib/campus-data";
 
@@ -215,10 +217,12 @@ function ProfilePage() {
           toast.error("Allow notifications in your browser settings to receive campus broadcasts");
           return;
         }
+        if (user) clearOneSignalPromptSuppression(user.id);
         setOneSignalBroadcastEnabled(true);
         toast.success("Campus broadcast alerts enabled");
       } else {
         await disableOneSignalBroadcasts();
+        if (user) suppressOneSignalPrompt(user.id);
         setOneSignalBroadcastEnabled(false);
         toast.success("Campus broadcast alerts disabled");
       }

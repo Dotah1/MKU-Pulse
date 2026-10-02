@@ -28,6 +28,8 @@ const ONESIGNAL_SCRIPT_URL = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSD
 const ONESIGNAL_WORKER_PATH = "push/onesignal/OneSignalSDKWorker.js";
 const ONESIGNAL_WORKER_SCOPE = "/push/onesignal/";
 const OPT_IN_STORAGE_KEY = "mku-pulse-onesignal-broadcasts-enabled";
+const PROMPT_DISMISSED_KEY_PREFIX = "mku-pulse:onesignal-prompt-dismissed:v1:";
+const PROMPT_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 
 let sdkPromise: Promise<OneSignalWebSdk> | null = null;
 
@@ -91,7 +93,59 @@ export function isOneSignalBroadcastsEnabled(): boolean {
   }
 }
 
-/** Called only by the student's explicit campus-broadcast opt-in control. */
+export function isOneSignalPromptSuppressed(userId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const key = `${PROMPT_DISMISSED_KEY_PREFIX}${userId}`;
+    const stored = window.localStorage.getItem(key);
+    if (!stored) return false;
+    const dismissedAt = Number(stored);
+    if (Number.isFinite(dismissedAt) && Date.now() - dismissedAt < PROMPT_COOLDOWN_MS) {
+      return true;
+    }
+    window.localStorage.removeItem(key);
+  } catch {
+    // If storage is unavailable, the prompt can still be shown this session.
+  }
+  return false;
+}
+
+export function suppressOneSignalPrompt(userId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(`${PROMPT_DISMISSED_KEY_PREFIX}${userId}`, String(Date.now()));
+  } catch {
+    // The current dialog still closes if browser storage is unavailable.
+  }
+}
+
+export function clearOneSignalPromptSuppression(userId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(`${PROMPT_DISMISSED_KEY_PREFIX}${userId}`);
+  } catch {
+    // Subscription state remains authoritative in the OneSignal SDK.
+  }
+}
+
+/** Prepare the SDK without asking for notification permission. */
+export async function prepareOneSignal(): Promise<void> {
+  await loadOneSignal();
+}
+
+/** Read the actual browser/device subscription state from OneSignal. */
+export async function isOneSignalPushSubscribed(): Promise<boolean | null> {
+  try {
+    const sdk = await loadOneSignal();
+    const optedIn = sdk.User.PushSubscription.optedIn;
+    if (optedIn === true) saveOptIn(true);
+    return optedIn;
+  } catch {
+    return null;
+  }
+}
+
+/** Called from a direct user gesture to opt in to campus broadcast campaigns. */
 export async function enableOneSignalBroadcasts(): Promise<boolean> {
   if (
     typeof window === "undefined" ||

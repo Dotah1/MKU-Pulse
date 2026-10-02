@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ImagePlus, Loader2, ShieldAlert, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, ShieldAlert, Trash2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notify } from "@/lib/notify";
 import { broadcastAnnouncement } from "@/lib/notifications.functions";
@@ -98,6 +98,10 @@ function AdminPage() {
   const [announcement, setAnnouncement] = useState("");
   const [nextOpenTitle, setNextOpenTitle] = useState("Campus announcement");
   const [nextOpenMessage, setNextOpenMessage] = useState("");
+  const [nextOpenImage, setNextOpenImage] = useState<File | null>(null);
+  const [nextOpenImagePreview, setNextOpenImagePreview] = useState<string | null>(null);
+  const nextOpenImageInput = useRef<HTMLInputElement>(null);
+  const [nextOpenDurationHours, setNextOpenDurationHours] = useState("24");
   const [nextOpenBusy, setNextOpenBusy] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollChoices, setPollChoices] = useState(["", "", "", ""]);
@@ -120,6 +124,16 @@ function AdminPage() {
     setPollImagePreview(preview);
     return () => URL.revokeObjectURL(preview);
   }, [pollImage]);
+
+  useEffect(() => {
+    if (!nextOpenImage) {
+      setNextOpenImagePreview(null);
+      return;
+    }
+    const preview = URL.createObjectURL(nextOpenImage);
+    setNextOpenImagePreview(preview);
+    return () => URL.revokeObjectURL(preview);
+  }, [nextOpenImage]);
 
   const load = useCallback(async () => {
     const [p, a, r, students, posts, matches] = await Promise.all([
@@ -330,22 +344,36 @@ function AdminPage() {
     if (!user) return;
     const title = sanitizeText(nextOpenTitle, 80).trim();
     const body = sanitizeText(nextOpenMessage, 1000).trim();
+    const durationHours = Number(nextOpenDurationHours);
     if (!title || !body) {
       toast.error("Add an announcement title and message");
       return;
     }
+    if (!Number.isInteger(durationHours) || durationHours < 1 || durationHours > 168) {
+      toast.error("Choose a display window between 1 and 168 hours");
+      return;
+    }
 
     setNextOpenBusy(true);
+    let imagePath: string | null = null;
     try {
-      const result = await broadcastAnnouncement({ data: { title, body } });
+      if (nextOpenImage) imagePath = await uploadFile("media", user.id, nextOpenImage);
+      const result = await broadcastAnnouncement({
+        data: { title, body, imagePath, durationHours },
+      });
       if (result.recipients === 0) {
+        if (imagePath) await supabase.storage.from("media").remove([imagePath]);
         toast.error("No student profiles were found to notify");
         return;
       }
       setNextOpenTitle("Campus announcement");
       setNextOpenMessage("");
+      setNextOpenImage(null);
+      setNextOpenDurationHours("24");
+      if (nextOpenImageInput.current) nextOpenImageInput.current.value = "";
       toast.success(`In-app announcement queued for ${result.recipients} students`);
     } catch {
+      if (imagePath) await supabase.storage.from("media").remove([imagePath]);
       toast.error("Could not send the in-app announcement");
     } finally {
       setNextOpenBusy(false);
@@ -548,8 +576,9 @@ function AdminPage() {
       <section className="rounded-2xl border border-border bg-card p-5">
         <h2 className="font-display text-base font-semibold">Show a message on next app open</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Students other than the sending admin will see this one-time in-app announcement when they
-          next open MKU Pulse. This does not send a device push; use OneSignal for push campaigns.
+          Students other than the sending admin will see this in-app announcement once when they
+          next open MKU Pulse, before it expires. This does not send a device push; use OneSignal
+          for push campaigns.
         </p>
         <div className="mt-3 space-y-2">
           <Label htmlFor="next-open-announcement-title">Title</Label>
@@ -570,6 +599,73 @@ function AdminPage() {
             maxLength={1000}
             placeholder="Write the message students should see…"
           />
+          <div className="space-y-2">
+            <Label htmlFor="next-open-announcement-image">Optional image</Label>
+            <input
+              ref={nextOpenImageInput}
+              id="next-open-announcement-image"
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0] ?? null;
+                if (file && !file.type.startsWith("image/")) {
+                  toast.error("Choose an image file");
+                  event.currentTarget.value = "";
+                  return;
+                }
+                setNextOpenImage(file);
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              onClick={() => nextOpenImageInput.current?.click()}
+            >
+              <ImagePlus className="mr-2 size-4" aria-hidden="true" />
+              {nextOpenImage ? "Change image" : "Add image"}
+            </Button>
+            {nextOpenImagePreview && (
+              <div className="relative w-fit">
+                <img
+                  src={nextOpenImagePreview}
+                  alt="Announcement image preview"
+                  className="max-h-48 max-w-full rounded-lg object-cover"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="absolute right-2 top-2 size-9"
+                  aria-label="Remove announcement image"
+                  onClick={() => {
+                    setNextOpenImage(null);
+                    if (nextOpenImageInput.current) nextOpenImageInput.current.value = "";
+                  }}
+                >
+                  <X className="size-4" aria-hidden="true" />
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="next-open-announcement-duration">Show for (hours)</Label>
+            <Input
+              id="next-open-announcement-duration"
+              type="number"
+              min={1}
+              max={168}
+              step={1}
+              value={nextOpenDurationHours}
+              onChange={(event) => setNextOpenDurationHours(event.target.value)}
+              className="min-h-11"
+            />
+            <p className="text-xs text-muted-foreground">
+              Each student sees it once when they open the app during this window. Default: 24
+              hours.
+            </p>
+          </div>
         </div>
         <Button
           className="mt-3 min-h-11"
