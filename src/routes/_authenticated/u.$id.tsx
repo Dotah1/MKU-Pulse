@@ -41,6 +41,7 @@ export const Route = createFileRoute("/_authenticated/u/$id")({
 
 interface PublicProfile {
   id: string;
+  streak_count?: number;
   full_name: string;
   avatar_url: string | null;
   major: string;
