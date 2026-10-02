@@ -150,3 +150,18 @@ export async function countToday(table: "posts" | "swipes", column: string, user
     .gte("created_at", startOfToday());
   return count ?? 0;
 }
+
+/** Records today's visit on the server (tamper-proof streak) and returns the verified count. */
+export async function checkInServerStreak(now: Date = new Date()): Promise<number | null> {
+  const { data, error } = await supabase.rpc("check_in_streak", { _today: localDateKey(now) });
+  if (error || typeof data !== "number") return null;
+  return data;
+}
+
+export const COMPLIMENT_OPTIONS = [
+  "Best Dressed in ST Tower",
+  "Future First-Class",
+  "Library Grinder",
+  "Great Energy",
+  "Smartest in CATs",
+] as const;

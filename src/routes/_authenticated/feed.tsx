@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { CampusToolsDialog } from "@/components/CampusToolsDialog";
 import { POST_MEDIA_MAX_BYTES, POST_VIDEO_MAX_SECONDS, sanitizeText } from "@/lib/campus";
 import { compressImageFile, uploadFile, videoDuration } from "@/lib/storage";
-import { checkAndUpdateStreak, countToday } from "@/lib/campus-data";
+import { checkAndUpdateStreak, checkInServerStreak, countToday } from "@/lib/campus-data";
 
 const FEED_FILTERS = [
   { id: "all", label: "🔥 All Posts" },
@@ -206,6 +206,9 @@ function FeedPage() {
 
   useEffect(() => {
     setPulseStreak(checkAndUpdateStreak());
+    void checkInServerStreak().then((n) => {
+      if (n) setPulseStreak(n);
+    });
   }, []);
 
   const blockedUntil = profile?.post_block_until ?? null;

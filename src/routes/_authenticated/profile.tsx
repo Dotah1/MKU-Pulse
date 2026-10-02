@@ -32,7 +32,7 @@ import {
 } from "@/lib/campus";
 import { compressImageFile, uploadFile } from "@/lib/storage";
 import { disablePush, enablePush } from "@/lib/push";
-import { checkAndUpdateStreak } from "@/lib/campus-data";
+import { checkAndUpdateStreak, checkInServerStreak } from "@/lib/campus-data";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({
@@ -89,6 +89,9 @@ function ProfilePage() {
 
   useEffect(() => {
     setPulseStreak(checkAndUpdateStreak());
+    void checkInServerStreak().then((n) => {
+      if (n) setPulseStreak(n);
+    });
   }, []);
 
   // Contact details live in a private table only the owner (and admin) can read.
