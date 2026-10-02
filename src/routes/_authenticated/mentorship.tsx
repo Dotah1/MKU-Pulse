@@ -100,13 +100,17 @@ function MentorshipPage() {
     if (!user) return;
     const topic = window.prompt("What would you like help with?");
     if (!topic) return;
-    const { error } = await supabase.from("mentor_sessions").insert({
-      mentor_id: mentorId,
-      student_id: user.id,
-      topic: sanitizeText(topic, 200),
-      scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
-    });
-    if (error) toast.error(error.message);
+    const { data: session, error } = await supabase
+      .from("mentor_sessions")
+      .insert({
+        mentor_id: mentorId,
+        student_id: user.id,
+        topic: sanitizeText(topic, 200),
+        scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
+      })
+      .select("id")
+      .single();
+    if (error || !session) toast.error(error?.message ?? "Could not request a mentorship session");
     else {
       toast.success("Session request sent to your mentor");
       void notify({
@@ -115,6 +119,7 @@ function MentorshipPage() {
         body: sanitizeText(topic, 120),
         url: "/mentorship",
         kind: "mentorship",
+        eventId: session.id,
       });
     }
   };
@@ -387,6 +392,7 @@ function IncomingRequests() {
           body: "Your mentor is ready to chat about your session request.",
           url: `/messages?c=${id}`,
           kind: "mentorship",
+          eventId: row.id,
         });
       }
       void navigate({ to: "/messages", search: { c: id, p: undefined } });

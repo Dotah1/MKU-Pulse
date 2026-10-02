@@ -153,10 +153,12 @@ export function PostCard({
     } else {
       setLiked(true);
       setLikes((n) => n + 1);
-      const { error } = await supabase
+      const { data: likeEvent, error } = await supabase
         .from("post_likes")
-        .insert({ post_id: post.id, user_id: user.id });
-      if (error) {
+        .insert({ post_id: post.id, user_id: user.id })
+        .select("id")
+        .single();
+      if (error || !likeEvent) {
         setLiked(false);
         setLikes((n) => Math.max(0, n - 1));
       } else if (!mine) {
@@ -166,6 +168,7 @@ export function PostCard({
           body: `${profile?.full_name ?? "A student"} liked your campus post.`,
           url: `/p/${post.id}`,
           kind: "post-like",
+          eventId: likeEvent.id,
         });
       }
     }
@@ -192,14 +195,22 @@ export function PostCard({
   const addComment = async () => {
     const text = sanitizeText(draft, 500);
     if (!text || !user) return;
-    const { error } = await supabase.from("post_comments").insert({
-      post_id: post.id,
-      user_id: user.id,
-      content: text,
-      parent_id: replyTo ? (replyTo.parent_id ?? replyTo.id) : null,
-    });
-    if (error) {
-      toast.error(profile?.is_banned ? "Your account is restricted" : error.message);
+    const { data: commentEvent, error } = await supabase
+      .from("post_comments")
+      .insert({
+        post_id: post.id,
+        user_id: user.id,
+        content: text,
+        parent_id: replyTo ? (replyTo.parent_id ?? replyTo.id) : null,
+      })
+      .select("id")
+      .single();
+    if (error || !commentEvent) {
+      toast.error(
+        profile?.is_banned
+          ? "Your account is restricted"
+          : (error?.message ?? "Could not add comment"),
+      );
       return;
     }
     const recipients = new Set([post.user_id]);
@@ -210,6 +221,7 @@ export function PostCard({
       body: `${profile?.full_name ?? "A student"}: ${text.slice(0, 180)}`,
       url: `/p/${post.id}`,
       kind: "post-comment",
+      eventId: commentEvent.id,
     });
     setDraft("");
     setReplyTo(null);

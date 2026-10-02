@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { ADMIN_EMAIL } from "@/lib/campus";
 
 export interface FirebaseWebConfig {
   apiKey: string;
@@ -75,28 +76,61 @@ const clean = (value: unknown, max: number) =>
     .slice(0, max)
     .trim();
 
+const notificationKinds = new Set([
+  "message",
+  "match",
+  "mentorship",
+  "payment",
+  "moderation",
+  "post-like",
+  "post-comment",
+  "poll-vote",
+  "compliment",
+]);
+
+const withEventKey = (url: string, eventId?: string) => {
+  if (!eventId) return url;
+  const target = new URL(url, "https://mku-pulse.invalid");
+  target.searchParams.set("notification_event", eventId);
+  return `${target.pathname}${target.search}${target.hash}`;
+};
+
+const isRecentEvent = (timestamp: string | null | undefined) => {
+  const createdAt = Date.parse(timestamp ?? "");
+  const now = Date.now();
+  return Number.isFinite(createdAt) && createdAt <= now + 60_000 && createdAt >= now - 10 * 60_000;
+};
+
 /**
- * Stores an in-app notification for a user and pushes it to their devices.
- * Callable by any signed-in user (message/match/mentorship alerts); content is
- * length-capped and stripped of markup.
+ * Stores an in-app notification and sends its push after verifying the actual
+ * persisted interaction and recipient. Admin-only event types require the
+ * configured admin identity. Event IDs in the in-app URL make retries idempotent.
  */
 export const notifyUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
+  .validator(
     (input: {
       recipientIds: string[] | string;
       title: string;
       body?: string;
       url?: string;
       kind?: string;
+      eventId?: string;
     }) => {
       const ids = (Array.isArray(input?.recipientIds) ? input.recipientIds : [input?.recipientIds])
         .map((id) => String(id ?? "").trim())
         .filter((id) => /^[0-9a-f-]{36}$/i.test(id));
       const title = clean(input?.title, 80);
       if (ids.length === 0) throw new Error("No recipients");
-      if (ids.length > 500) throw new Error("Too many recipients");
       if (!title) throw new Error("A title is required");
+      const kind = clean(input?.kind, 40) || "general";
+      if (!notificationKinds.has(kind)) throw new Error("Unsupported notification kind");
+      const recipientIds = [...new Set(ids)];
+      if (recipientIds.length > (kind === "post-comment" ? 2 : 1)) {
+        throw new Error("Too many recipients for this event");
+      }
+      const eventId = String(input?.eventId ?? "").trim() || undefined;
+      if (eventId && !/^[0-9a-f-]{36}$/i.test(eventId)) throw new Error("Invalid event ID");
       const rawUrl = clean(input?.url, 200);
       let url = "/notifications";
       if (rawUrl.startsWith("/")) {
@@ -110,27 +144,332 @@ export const notifyUser = createServerFn({ method: "POST" })
         }
       }
       return {
-        recipientIds: [...new Set(ids)],
+        recipientIds,
         title,
         body: clean(input?.body, 300),
         url,
-        kind: clean(input?.kind, 40) || "general",
+        kind,
+        eventId,
       };
     },
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
     const recipients = data.recipientIds.filter((id) => id !== context.userId);
     if (recipients.length === 0) return { sent: 0 };
+    if (recipients.length > (data.kind === "post-comment" ? 2 : 1)) {
+      throw new Error("Too many recipients for this event");
+    }
+
+    const isAdmin =
+      String(context.claims["email"] ?? "").toLowerCase() === ADMIN_EMAIL.toLowerCase();
+    const recipientId = recipients[0];
+    if (!recipientId) return { sent: 0 };
+    const target = new URL(data.url, "https://mku-pulse.invalid");
+    const eventId = data.eventId;
+    let eventOccurredAt: string | null = null;
+    const requireEventId = () => {
+      if (!eventId) throw new Error("A persisted event ID is required");
+      return eventId;
+    };
+    const denied = () => new Error("Notification is not authorized for this event");
+
+    switch (data.kind) {
+      case "message": {
+        const id = requireEventId();
+        if (recipients.length !== 1 || target.pathname !== "/messages") throw denied();
+        const { data: message, error } = await supabaseAdmin
+          .from("messages")
+          .select("conversation_id, sender_id, created_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        if (
+          !message ||
+          message.sender_id !== context.userId ||
+          !isRecentEvent(message.created_at)
+        ) {
+          throw denied();
+        }
+        eventOccurredAt = message.created_at;
+        const { data: conversation, error: conversationError } = await supabaseAdmin
+          .from("conversations")
+          .select("user_a, user_b")
+          .eq("id", message.conversation_id)
+          .maybeSingle();
+        if (conversationError) throw new Error(conversationError.message);
+        const isPair =
+          conversation?.user_a === context.userId && conversation.user_b === recipientId;
+        const isReversedPair =
+          conversation?.user_b === context.userId && conversation.user_a === recipientId;
+        if (
+          (!isPair && !isReversedPair) ||
+          target.searchParams.get("c") !== message.conversation_id
+        ) {
+          throw denied();
+        }
+        break;
+      }
+      case "match": {
+        const id = requireEventId();
+        if (recipients.length !== 1 || target.pathname !== "/connect") throw denied();
+        const { data: match, error } = await supabaseAdmin
+          .from("matches")
+          .select("user_a, user_b, is_active, created_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        const isPair =
+          (match?.user_a === context.userId && match.user_b === recipientId) ||
+          (match?.user_b === context.userId && match.user_a === recipientId);
+        if (!match?.is_active || !isPair || !isRecentEvent(match.created_at)) throw denied();
+        eventOccurredAt = match.created_at;
+        break;
+      }
+      case "mentorship": {
+        const id = requireEventId();
+        if (recipients.length !== 1) throw denied();
+        if (isAdmin) {
+          const { data: application, error } = await supabaseAdmin
+            .from("mentor_applications")
+            .select("user_id, reviewed_by, status, reviewed_at")
+            .eq("id", id)
+            .maybeSingle();
+          if (error) throw new Error(error.message);
+          if (
+            target.pathname !== "/mentorship" ||
+            !application ||
+            application.user_id !== recipientId ||
+            application.reviewed_by !== context.userId ||
+            !["approved", "rejected"].includes(application.status) ||
+            !isRecentEvent(application.reviewed_at)
+          ) {
+            throw denied();
+          }
+          eventOccurredAt = application.reviewed_at;
+        } else {
+          const { data: session, error } = await supabaseAdmin
+            .from("mentor_sessions")
+            .select("mentor_id, student_id, status, created_at")
+            .eq("id", id)
+            .maybeSingle();
+          if (error) throw new Error(error.message);
+          const requestToMentor =
+            session?.student_id === context.userId &&
+            session.mentor_id === recipientId &&
+            session.status === "pending" &&
+            target.pathname === "/mentorship";
+          const mentorApproval =
+            session?.mentor_id === context.userId &&
+            session.student_id === recipientId &&
+            session.status === "approved" &&
+            target.pathname === "/messages";
+          if (
+            (!requestToMentor && !mentorApproval) ||
+            (requestToMentor && !isRecentEvent(session?.created_at))
+          ) {
+            throw denied();
+          }
+          eventOccurredAt = session?.created_at ?? null;
+        }
+        break;
+      }
+      case "payment": {
+        const id = requireEventId();
+        if (!isAdmin || recipients.length !== 1 || target.pathname !== "/profile") throw denied();
+        const { data: payment, error } = await supabaseAdmin
+          .from("payment_requests")
+          .select("user_id, reviewed_by, status, reviewed_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        if (
+          !payment ||
+          payment.user_id !== recipientId ||
+          payment.reviewed_by !== context.userId ||
+          !["approved", "rejected"].includes(payment.status) ||
+          !isRecentEvent(payment.reviewed_at)
+        ) {
+          throw denied();
+        }
+        eventOccurredAt = payment.reviewed_at;
+        break;
+      }
+      case "moderation": {
+        if (!isAdmin || recipients.length !== 1 || target.pathname !== "/feed") throw denied();
+        const { data: profile, error } = await supabaseAdmin
+          .from("profiles")
+          .select("post_block_until")
+          .eq("id", recipientId)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        const blockUntil = Date.parse(profile?.post_block_until ?? "");
+        if (!Number.isFinite(blockUntil) || blockUntil <= Date.now()) throw denied();
+        break;
+      }
+      case "post-like": {
+        const id = requireEventId();
+        if (recipients.length !== 1) throw denied();
+        const { data: like, error } = await supabaseAdmin
+          .from("post_likes")
+          .select("post_id, user_id, created_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        const { data: post, error: postError } = like
+          ? await supabaseAdmin.from("posts").select("user_id").eq("id", like.post_id).maybeSingle()
+          : { data: null, error: null };
+        if (postError) throw new Error(postError.message);
+        if (
+          !like ||
+          like.user_id !== context.userId ||
+          !isRecentEvent(like.created_at) ||
+          !post ||
+          post.user_id !== recipientId ||
+          target.pathname !== `/p/${like.post_id}`
+        ) {
+          throw denied();
+        }
+        eventOccurredAt = like.created_at;
+        break;
+      }
+      case "post-comment": {
+        const id = requireEventId();
+        if (recipients.length > 2) throw denied();
+        const { data: comment, error } = await supabaseAdmin
+          .from("post_comments")
+          .select("post_id, user_id, created_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        const { data: post, error: postError } = comment
+          ? await supabaseAdmin
+              .from("posts")
+              .select("user_id")
+              .eq("id", comment.post_id)
+              .maybeSingle()
+          : { data: null, error: null };
+        if (postError) throw new Error(postError.message);
+        if (
+          !comment ||
+          comment.user_id !== context.userId ||
+          !isRecentEvent(comment.created_at) ||
+          !post
+        ) {
+          throw denied();
+        }
+        if (target.pathname !== `/p/${comment.post_id}`) throw denied();
+        eventOccurredAt = comment.created_at;
+        for (const id of recipients) {
+          if (id === post.user_id) continue;
+          const { data: participant, error: participantError } = await supabaseAdmin
+            .from("post_comments")
+            .select("id")
+            .eq("post_id", comment.post_id)
+            .eq("user_id", id)
+            .limit(1)
+            .maybeSingle();
+          if (participantError) throw new Error(participantError.message);
+          if (!participant) throw denied();
+        }
+        break;
+      }
+      case "poll-vote": {
+        const id = requireEventId();
+        if (recipients.length !== 1) throw denied();
+        const { data: vote, error } = await supabaseAdmin
+          .from("poll_votes")
+          .select("poll_id, user_id, created_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        const { data: poll, error: pollError } = vote
+          ? await supabaseAdmin
+              .from("polls")
+              .select("created_by")
+              .eq("id", vote.poll_id)
+              .maybeSingle()
+          : { data: null, error: null };
+        if (pollError) throw new Error(pollError.message);
+        if (
+          !vote ||
+          vote.user_id !== context.userId ||
+          !isRecentEvent(vote.created_at) ||
+          !poll ||
+          poll.created_by !== recipientId ||
+          target.pathname !== "/feed" ||
+          target.hash !== `#poll-${vote.poll_id}`
+        ) {
+          throw denied();
+        }
+        eventOccurredAt = vote.created_at;
+        break;
+      }
+      case "compliment": {
+        const id = requireEventId();
+        if (recipients.length !== 1 || !["/profile", "/messages"].includes(target.pathname)) {
+          throw denied();
+        }
+        const { data: compliment, error } = await supabaseAdmin
+          .from("campus_crushes")
+          .select("sender_id, recipient_id, created_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        if (
+          !compliment ||
+          compliment.sender_id !== context.userId ||
+          compliment.recipient_id !== recipientId ||
+          !isRecentEvent(compliment.created_at)
+        ) {
+          throw denied();
+        }
+        eventOccurredAt = compliment.created_at;
+        break;
+      }
+      default:
+        throw denied();
+    }
+
+    const notificationUrl = withEventKey(data.url, data.eventId);
+    const recipientsToInsert: string[] = [];
+    for (const id of recipients) {
+      if (data.eventId) {
+        const { data: existing, error } = await supabaseAdmin
+          .from("notifications")
+          .select("id")
+          .eq("user_id", id)
+          .eq("kind", data.kind)
+          .eq("url", notificationUrl)
+          .limit(1)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        if (existing) continue;
+        if (eventOccurredAt) {
+          const { data: legacy, error: legacyError } = await supabaseAdmin
+            .from("notifications")
+            .select("id")
+            .eq("user_id", id)
+            .eq("kind", data.kind)
+            .eq("url", data.url)
+            .gte("created_at", eventOccurredAt)
+            .limit(1)
+            .maybeSingle();
+          if (legacyError) throw new Error(legacyError.message);
+          if (legacy) continue;
+        }
+      }
+      recipientsToInsert.push(id);
+    }
+    if (recipientsToInsert.length === 0) return { sent: 0 };
 
     const { error: insertError } = await supabaseAdmin.from("notifications").insert(
-      recipients.map((id) => ({
+      recipientsToInsert.map((id) => ({
         user_id: id,
         kind: data.kind,
         title: data.title,
         body: data.body,
-        url: data.url,
+        url: notificationUrl,
       })),
     );
     if (insertError) throw new Error(insertError.message);
@@ -139,7 +478,7 @@ export const notifyUser = createServerFn({ method: "POST" })
     const { data: profiles } = await supabaseAdmin
       .from("profiles")
       .select("id, notifications_enabled")
-      .in("id", recipients);
+      .in("id", recipientsToInsert);
     const pushable = (profiles ?? [])
       .filter((p) => p.notifications_enabled !== false)
       .map((p) => p.id);
@@ -157,7 +496,7 @@ export const notifyUser = createServerFn({ method: "POST" })
       const { sent, staleTokens } = await sendFcmToTokens(tokens, {
         title: data.title,
         body: data.body,
-        url: data.url,
+        url: notificationUrl,
         kind: data.kind,
       });
       if (staleTokens.length > 0) {
@@ -169,4 +508,51 @@ export const notifyUser = createServerFn({ method: "POST" })
       console.error("Push delivery failed", error);
       return { sent: 0 };
     }
+  });
+
+/** Creates in-app-only announcement records for all students; it never sends device push. */
+export const broadcastAnnouncement = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { title: string; body: string }) => {
+    const title = clean(input?.title, 80);
+    const body = clean(input?.body, 1000);
+    if (!title) throw new Error("An announcement title is required");
+    if (!body) throw new Error("An announcement message is required");
+    return { title, body };
+  })
+  .handler(async ({ data, context }) => {
+    const email = String(context.claims["email"] ?? "").toLowerCase();
+    if (email !== ADMIN_EMAIL.toLowerCase()) throw new Error("Forbidden: admin access required");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const recipientIds: string[] = [];
+    const pageSize = 1000;
+    let offset = 0;
+
+    while (true) {
+      const { data: profiles, error } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .range(offset, offset + pageSize - 1);
+      if (error) throw new Error(error.message);
+      const page = profiles ?? [];
+      recipientIds.push(...page.map((profile) => profile.id).filter((id) => id !== context.userId));
+      if (page.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    const recipients = [...new Set(recipientIds)];
+    for (let start = 0; start < recipients.length; start += 500) {
+      const rows = recipients.slice(start, start + 500).map((user_id) => ({
+        user_id,
+        kind: "announcement",
+        title: data.title,
+        body: data.body,
+        url: "/feed",
+      }));
+      const { error } = await supabaseAdmin.from("notifications").insert(rows);
+      if (error) throw new Error(error.message);
+    }
+
+    return { recipients: recipients.length };
   });

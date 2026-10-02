@@ -411,16 +411,20 @@ function ChatPane({
       return;
     }
     setSending(true);
-    const { error } = await supabase.from("messages").insert({
-      conversation_id: conversation.id,
-      sender_id: user.id,
-      content: text,
-      reply_to_id: replyTo?.id ?? null,
-      post_id: postDraft?.id ?? null,
-    });
-    if (error) {
+    const { data: insertedMessage, error } = await supabase
+      .from("messages")
+      .insert({
+        conversation_id: conversation.id,
+        sender_id: user.id,
+        content: text,
+        reply_to_id: replyTo?.id ?? null,
+        post_id: postDraft?.id ?? null,
+      })
+      .select("id")
+      .single();
+    if (error || !insertedMessage) {
       setSending(false);
-      toast.error(error.message);
+      toast.error(error?.message ?? "Could not send message");
       return;
     }
     await supabase
@@ -440,6 +444,7 @@ function ChatPane({
       body: text.slice(0, 120),
       url: `/messages?c=${conversation.id}`,
       kind: "message",
+      eventId: insertedMessage.id,
     });
     await load();
   };

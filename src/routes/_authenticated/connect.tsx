@@ -274,6 +274,7 @@ function ConnectPage() {
           title: "It's a match!",
           body: "You matched with someone on MKU Pulse.",
           url: "/connect",
+          eventId: match.id,
           kind: "match",
         });
       }
@@ -314,6 +315,7 @@ function ConnectPage() {
           title: "It's a match!",
           body: "You matched with someone on MKU Pulse.",
           url: "/connect",
+          eventId: match.id,
           kind: "match",
         });
       }

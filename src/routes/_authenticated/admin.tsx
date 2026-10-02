@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { ImagePlus, Loader2, ShieldAlert, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notify } from "@/lib/notify";
+import { broadcastAnnouncement } from "@/lib/notifications.functions";
 import { deleteUserAccount } from "@/lib/admin.functions";
 import { useCampus } from "@/hooks/useCampus";
 import { UserAvatar } from "@/components/StoredMedia";
@@ -95,6 +96,9 @@ function AdminPage() {
   const [people, setPeople] = useState<Record<string, MiniProfile>>({});
   const [stats, setStats] = useState({ students: 0, posts: 0, matches: 0 });
   const [announcement, setAnnouncement] = useState("");
+  const [nextOpenTitle, setNextOpenTitle] = useState("Campus announcement");
+  const [nextOpenMessage, setNextOpenMessage] = useState("");
+  const [nextOpenBusy, setNextOpenBusy] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollChoices, setPollChoices] = useState(["", "", "", ""]);
   const [pollImage, setPollImage] = useState<File | null>(null);
@@ -251,6 +255,7 @@ function AdminPage() {
         : note || "The M-Pesa code could not be verified.",
       url: "/profile",
       kind: "payment",
+      eventId: row.id,
     });
     await load();
   };
@@ -287,6 +292,7 @@ function AdminPage() {
         : "Feel free to apply again with more detail.",
       url: "/mentorship",
       kind: "mentorship",
+      eventId: row.id,
     });
     await load();
   };
@@ -317,6 +323,32 @@ function AdminPage() {
     else {
       setAnnouncement("");
       toast.success("Announcement published");
+    }
+  };
+
+  const sendNextOpenAnnouncement = async () => {
+    if (!user) return;
+    const title = sanitizeText(nextOpenTitle, 80).trim();
+    const body = sanitizeText(nextOpenMessage, 1000).trim();
+    if (!title || !body) {
+      toast.error("Add an announcement title and message");
+      return;
+    }
+
+    setNextOpenBusy(true);
+    try {
+      const result = await broadcastAnnouncement({ data: { title, body } });
+      if (result.recipients === 0) {
+        toast.error("No student profiles were found to notify");
+        return;
+      }
+      setNextOpenTitle("Campus announcement");
+      setNextOpenMessage("");
+      toast.success(`In-app announcement queued for ${result.recipients} students`);
+    } catch {
+      toast.error("Could not send the in-app announcement");
+    } finally {
+      setNextOpenBusy(false);
     }
   };
 
@@ -510,6 +542,41 @@ function AdminPage() {
         />
         <Button className="mt-3 min-h-11" onClick={() => void postAnnouncement()}>
           Publish to feed
+        </Button>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <h2 className="font-display text-base font-semibold">Show a message on next app open</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Students other than the sending admin will see this one-time in-app announcement when they
+          next open MKU Pulse. This does not send a device push; use OneSignal for push campaigns.
+        </p>
+        <div className="mt-3 space-y-2">
+          <Label htmlFor="next-open-announcement-title">Title</Label>
+          <Input
+            id="next-open-announcement-title"
+            value={nextOpenTitle}
+            onChange={(e) => setNextOpenTitle(e.target.value)}
+            maxLength={80}
+            placeholder="Campus announcement"
+            className="min-h-11"
+          />
+          <Label htmlFor="next-open-announcement-message">Message</Label>
+          <Textarea
+            id="next-open-announcement-message"
+            value={nextOpenMessage}
+            onChange={(e) => setNextOpenMessage(e.target.value)}
+            rows={3}
+            maxLength={1000}
+            placeholder="Write the message students should see…"
+          />
+        </div>
+        <Button
+          className="mt-3 min-h-11"
+          disabled={nextOpenBusy || !nextOpenMessage.trim()}
+          onClick={() => void sendNextOpenAnnouncement()}
+        >
+          {nextOpenBusy ? "Sending…" : "Send in-app announcement"}
         </Button>
       </section>
 

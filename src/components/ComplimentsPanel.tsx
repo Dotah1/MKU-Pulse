@@ -35,6 +35,13 @@ export function SendCompliment({ recipientId, myId }: { recipientId: string; myI
       return;
     }
     setSent(tag);
+    const { data: complimentEvent } = await supabase
+      .from("campus_crushes")
+      .select("id")
+      .eq("sender_id", myId)
+      .eq("recipient_id", recipientId)
+      .maybeSingle();
+    if (!complimentEvent) return;
     if (mutual) {
       toast.success("It's a Mutual Crush! 💞 Check your messages.");
       void notifyUser({
@@ -44,6 +51,7 @@ export function SendCompliment({ recipientId, myId }: { recipientId: string; myI
           body: "You and someone complimented each other. Say hi!",
           url: "/messages",
           kind: "compliment",
+          eventId: complimentEvent.id,
         },
       }).catch(() => undefined);
     } else {
@@ -55,6 +63,7 @@ export function SendCompliment({ recipientId, myId }: { recipientId: string; myI
           body: `"${tag}"`,
           url: "/profile",
           kind: "compliment",
+          eventId: complimentEvent.id,
         },
       }).catch(() => undefined);
     }

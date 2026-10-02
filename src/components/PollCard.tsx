@@ -91,12 +91,14 @@ export function PollCard({
     if (!user || closed) return;
     const isFirstVote = myOption === null;
     setBusy(true);
-    const { error } = await supabase
+    const { data: voteEvent, error } = await supabase
       .from("poll_votes")
       .upsert(
         { poll_id: poll.id, option_id: optionId, user_id: user.id },
         { onConflict: "poll_id,user_id" },
-      );
+      )
+      .select("id")
+      .single();
     setBusy(false);
     if (error) {
       toast.error(error.message);
@@ -110,6 +112,7 @@ export function PollCard({
         body: `${profile?.full_name ?? "A student"} voted: ${poll.question.slice(0, 120)}`,
         url: `/feed#poll-${poll.id}`,
         kind: "poll-vote",
+        eventId: voteEvent.id,
       });
     }
     await load();

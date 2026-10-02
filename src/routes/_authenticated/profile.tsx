@@ -32,6 +32,11 @@ import {
 } from "@/lib/campus";
 import { compressImageFile, uploadFile } from "@/lib/storage";
 import { disablePush, enablePush } from "@/lib/push";
+import {
+  disableOneSignalBroadcasts,
+  enableOneSignalBroadcasts,
+  isOneSignalBroadcastsEnabled,
+} from "@/lib/onesignal";
 import { checkAndUpdateStreak, checkInServerStreak } from "@/lib/campus-data";
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -65,6 +70,8 @@ function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [pulseStreak, setPulseStreak] = useState<number | null>(null);
+  const [oneSignalBroadcastEnabled, setOneSignalBroadcastEnabled] = useState(false);
+  const [oneSignalBroadcastBusy, setOneSignalBroadcastBusy] = useState(false);
 
   const addOwnInterest = () => {
     const value = sanitizeText(ownInterest, 30).trim();
@@ -92,6 +99,10 @@ function ProfilePage() {
     void checkInServerStreak().then((n) => {
       if (n) setPulseStreak(n);
     });
+  }, []);
+
+  useEffect(() => {
+    setOneSignalBroadcastEnabled(isOneSignalBroadcastsEnabled());
   }, []);
 
   // Contact details live in a private table only the owner (and admin) can read.
@@ -193,6 +204,31 @@ function ProfilePage() {
       if (!value) await disablePush();
     }
     await refreshProfile();
+  };
+
+  const toggleOneSignalBroadcast = async (enabled: boolean) => {
+    setOneSignalBroadcastBusy(true);
+    try {
+      if (enabled) {
+        const subscribed = await enableOneSignalBroadcasts();
+        if (!subscribed) {
+          toast.error("Allow notifications in your browser settings to receive campus broadcasts");
+          return;
+        }
+        setOneSignalBroadcastEnabled(true);
+        toast.success("Campus broadcast alerts enabled");
+      } else {
+        await disableOneSignalBroadcasts();
+        setOneSignalBroadcastEnabled(false);
+        toast.success("Campus broadcast alerts disabled");
+      }
+    } catch {
+      toast.error(
+        enabled ? "Could not enable campus broadcasts" : "Could not disable campus broadcasts",
+      );
+    } finally {
+      setOneSignalBroadcastBusy(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -395,6 +431,21 @@ function ProfilePage() {
             checked={profile?.notifications_enabled ?? true}
             onCheckedChange={(v) => void toggleFlag("notifications_enabled", v)}
             aria-label="Push notifications"
+          />
+        </label>
+        <label className="flex min-h-11 items-center justify-between gap-4 text-sm">
+          <span>
+            Campus broadcast alerts
+            <span className="block text-xs text-muted-foreground">
+              Optional OneSignal campaigns from MKU Pulse; this device subscribes only after you opt
+              in.
+            </span>
+          </span>
+          <Switch
+            checked={oneSignalBroadcastEnabled}
+            disabled={oneSignalBroadcastBusy}
+            onCheckedChange={(v) => void toggleOneSignalBroadcast(v)}
+            aria-label="Campus broadcast alerts"
           />
         </label>
         <label className="flex min-h-11 items-center justify-between gap-4 text-sm">

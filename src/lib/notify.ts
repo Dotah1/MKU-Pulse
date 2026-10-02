@@ -11,6 +11,7 @@ export async function notify(input: {
   body?: string;
   url?: string;
   kind?: string;
+  eventId?: string;
 }): Promise<void> {
   try {
     await notifyUser({ data: input });
