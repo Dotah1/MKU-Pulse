@@ -408,7 +408,7 @@ function SignupForm() {
           id="su-photo"
           type="file"
           accept="image/*"
-          required
+          aria-required="true"
           className="sr-only"
           disabled={photoPreparing}
           onChange={(e) => {
