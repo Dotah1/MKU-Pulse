@@ -17,6 +17,7 @@ import { StoredImage, UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getOrCreateConversation } from "@/lib/campus-data";
+import { ReceivedCompliments, SendCompliment } from "@/components/ComplimentsPanel";
 
 export const Route = createFileRoute("/_authenticated/u/$id")({
   head: () => ({
@@ -96,7 +97,7 @@ function PublicProfilePage() {
         supabase
           .from("profiles")
           .select(
-            "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_private",
+            "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_private, streak_count",
           )
           .eq("id", id)
           .maybeSingle(),
@@ -197,6 +198,9 @@ function PublicProfilePage() {
                   <GraduationCap className="mr-1 size-3" aria-hidden="true" /> Mentor
                 </Badge>
               )}
+              {(profile.streak_count ?? 0) > 1 && (
+                <Badge variant="secondary">🔥 {profile.streak_count}-day streak</Badge>
+              )}
               {profile.tier !== "free" && (
                 <Badge variant="secondary">
                   <Star className="mr-1 size-3" aria-hidden="true" />
@@ -232,6 +236,8 @@ function PublicProfilePage() {
           </div>
         </div>
       </header>
+
+      {mine ? <ReceivedCompliments /> : user && <SendCompliment recipientId={id} myId={user.id} />}
 
       {mine && recentPosts.length > 0 && (
         <details className="rounded-2xl border border-border bg-card">
