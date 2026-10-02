@@ -143,24 +143,20 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     };
   }, [session, profile, loadProfile]);
 
-  // Firebase Cloud Messaging: request permission, store the device token and
-  // surface foreground pushes as toasts. Works in the browser and inside the
-  // WebToAPK build (which supplies the native token on window).
+  // Register FCM only after permission has already been granted or the user has
+  // supplied a native token. The profile setting requests browser permission.
+  const pushEnabled = Boolean(profile) && profile?.notifications_enabled !== false;
   useEffect(() => {
-    if (typeof window === "undefined" || !session) return;
-    if (profile && profile.notifications_enabled === false) return;
+    if (typeof window === "undefined" || !session?.user.id || !pushEnabled) return;
     let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void enablePush((message) => {
-        if (cancelled) return;
-        toast(message.title, { description: message.body });
-      }).catch(() => undefined);
-    }, 4_000);
+    void enablePush((message) => {
+      if (cancelled) return;
+      toast(message.title, { description: message.body });
+    }).catch(() => undefined);
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
-  }, [session, profile]);
+  }, [session?.user.id, pushEnabled]);
 
   const email = session?.user.email?.toLowerCase() ?? "";
   const isAdmin = email === ADMIN_EMAIL;

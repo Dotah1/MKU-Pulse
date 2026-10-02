@@ -30,6 +30,7 @@ import { timeAgo, sanitizeText } from "@/lib/campus";
 import { deletePostWithMedia } from "@/lib/media.functions";
 import { getOrCreateConversation, type MiniProfile } from "@/lib/campus-data";
 import { shareToWhatsApp } from "@/lib/share";
+import { notify } from "@/lib/notify";
 
 export interface PostRow {
   id: string;
@@ -158,6 +159,14 @@ export function PostCard({
       if (error) {
         setLiked(false);
         setLikes((n) => Math.max(0, n - 1));
+      } else if (!mine) {
+        void notify({
+          recipientIds: post.user_id,
+          title: "New like on your post",
+          body: `${profile?.full_name ?? "A student"} liked your campus post.`,
+          url: `/p/${post.id}`,
+          kind: "post-like",
+        });
       }
     }
   };
@@ -193,6 +202,15 @@ export function PostCard({
       toast.error(profile?.is_banned ? "Your account is restricted" : error.message);
       return;
     }
+    const recipients = new Set([post.user_id]);
+    if (replyTo && replyTo.user_id !== post.user_id) recipients.add(replyTo.user_id);
+    void notify({
+      recipientIds: [...recipients],
+      title: replyTo ? "New reply on a campus post" : "New comment on your post",
+      body: `${profile?.full_name ?? "A student"}: ${text.slice(0, 180)}`,
+      url: `/p/${post.id}`,
+      kind: "post-comment",
+    });
     setDraft("");
     setReplyTo(null);
     await loadComments();

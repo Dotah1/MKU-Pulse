@@ -370,10 +370,24 @@ function IncomingRequests() {
     try {
       const id = await getOrCreateConversation(user.id, row.student_id);
       if (row.status === "pending") {
-        await supabase.from("mentor_sessions").update({ status: "approved" }).eq("id", row.id);
+        const { error } = await supabase
+          .from("mentor_sessions")
+          .update({ status: "approved" })
+          .eq("id", row.id);
+        if (error) {
+          toast.error(error.message);
+          return;
+        }
         setRows((prev) =>
           prev.map((r) => (r.id === row.id ? { ...r, status: "approved" as const } : r)),
         );
+        void notify({
+          recipientIds: row.student_id,
+          title: "Mentor accepted your request",
+          body: "Your mentor is ready to chat about your session request.",
+          url: `/messages?c=${id}`,
+          kind: "mentorship",
+        });
       }
       void navigate({ to: "/messages", search: { c: id, p: undefined } });
     } catch {

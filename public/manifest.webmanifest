@@ -1,0 +1,30 @@
+{
+  "id": "/",
+  "name": "MKU Pulse — Campus Social",
+  "short_name": "MKU Pulse",
+  "description": "Connect with your Mount Kenya University community: share campus updates, meet students, find mentors and chat in real time.",
+  "lang": "en-KE",
+  "start_url": "/feed",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#f4faff",
+  "theme_color": "#3f83bd",
+  "categories": ["social", "education", "lifestyle"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

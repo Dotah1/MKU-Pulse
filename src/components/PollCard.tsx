@@ -9,9 +9,11 @@ import { StoredImage } from "@/components/StoredMedia";
 import { deletePollWithMedia } from "@/lib/media.functions";
 import { timeAgo } from "@/lib/campus";
 import { shareToWhatsApp } from "@/lib/share";
+import { notify } from "@/lib/notify";
 
 export interface PollRow {
   id: string;
+  created_by: string;
   question: string;
   image_url: string | null;
   is_active: boolean;
@@ -35,7 +37,7 @@ export function PollCard({
   options: PollOptionRow[];
   onDeleted?: (id: string) => void;
 }) {
-  const { user, isAdmin } = useCampus();
+  const { user, isAdmin, profile } = useCampus();
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
   const [myOption, setMyOption] = useState<string | null>(null);
@@ -87,6 +89,7 @@ export function PollCard({
 
   const vote = async (optionId: string) => {
     if (!user || closed) return;
+    const isFirstVote = myOption === null;
     setBusy(true);
     const { error } = await supabase
       .from("poll_votes")
@@ -100,6 +103,15 @@ export function PollCard({
       return;
     }
     setMyOption(optionId);
+    if (isFirstVote && poll.created_by !== user.id) {
+      void notify({
+        recipientIds: poll.created_by,
+        title: "New vote in your poll",
+        body: `${profile?.full_name ?? "A student"} voted: ${poll.question.slice(0, 120)}`,
+        url: `/feed#poll-${poll.id}`,
+        kind: "poll-vote",
+      });
+    }
     await load();
   };
 
@@ -207,7 +219,7 @@ export async function fetchFeedPolls(): Promise<{
 }> {
   const { data: polls } = await supabase
     .from("polls")
-    .select("id, question, image_url, is_active, closes_at, created_at")
+    .select("id, created_by, question, image_url, is_active, closes_at, created_at")
     .order("created_at", { ascending: false })
 
     .limit(10);

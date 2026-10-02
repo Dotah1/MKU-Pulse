@@ -104,6 +104,14 @@ export async function sendFcmToTokens(
   const accessToken = await getAccessToken(account);
   const endpoint = `https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`;
   const url = payload.url ?? "/notifications";
+  const appOrigin = process.env["PUBLIC_APP_URL"] ?? "https://mku-pulse.vercel.app";
+  const appBase = new URL(appOrigin);
+  const requestedLink = new URL(url, appBase);
+  const clickPath =
+    requestedLink.origin === appBase.origin
+      ? `${requestedLink.pathname}${requestedLink.search}${requestedLink.hash}`
+      : "/notifications";
+  const clickLink = new URL(clickPath, appBase.origin).toString();
 
   const staleTokens: string[] = [];
   let sent = 0;
@@ -124,10 +132,10 @@ export async function sendFcmToTokens(
             notification: {
               title: payload.title,
               body: payload.body,
-              icon: "/favicon.ico",
-              badge: "/favicon.ico",
+              icon: "/icons/icon-192.png",
+              badge: "/icons/icon-192.png",
             },
-            fcm_options: { link: url },
+            fcm_options: { link: clickLink },
           },
         },
       };

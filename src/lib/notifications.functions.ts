@@ -98,11 +98,22 @@ export const notifyUser = createServerFn({ method: "POST" })
       if (ids.length > 500) throw new Error("Too many recipients");
       if (!title) throw new Error("A title is required");
       const rawUrl = clean(input?.url, 200);
+      let url = "/notifications";
+      if (rawUrl.startsWith("/")) {
+        try {
+          const target = new URL(rawUrl, "https://mku-pulse.invalid");
+          if (target.origin === "https://mku-pulse.invalid") {
+            url = `${target.pathname}${target.search}${target.hash}`;
+          }
+        } catch {
+          // Fall back to the in-app notification center for malformed URLs.
+        }
+      }
       return {
         recipientIds: [...new Set(ids)],
         title,
         body: clean(input?.body, 300),
-        url: rawUrl.startsWith("/") ? rawUrl : "/notifications",
+        url,
         kind: clean(input?.kind, 40) || "general",
       };
     },

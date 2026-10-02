@@ -3,14 +3,15 @@ import {
   registerDeviceToken,
   unregisterDeviceToken,
 } from "@/lib/notifications.functions";
+import { registerPwaServiceWorker } from "@/lib/pwa";
 
 /**
  * Browser/APK push wiring for Firebase Cloud Messaging.
  * All Firebase imports are dynamic so nothing touches the SSR bundle.
  */
 
-const SW_PATH = "/firebase-messaging-sw.js";
 let currentToken: string | null = null;
+let foregroundUnsubscribe: (() => void) | null = null;
 
 interface NativeBridge {
   getFcmToken?: () => string | null;
@@ -54,6 +55,7 @@ export interface ForegroundMessage {
  */
 export async function enablePush(
   onForeground?: (message: ForegroundMessage) => void,
+  requestPermission = false,
 ): Promise<string | null> {
   if (typeof window === "undefined") return null;
 
@@ -67,14 +69,15 @@ export async function enablePush(
 
   if (!("serviceWorker" in navigator) || !("Notification" in window)) return null;
 
-  const config = await getFirebaseWebConfig();
-  if (!config.configured) return null;
-
   if (Notification.permission === "default") {
+    if (!requestPermission) return null;
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return null;
   }
   if (Notification.permission !== "granted") return null;
+
+  const config = await getFirebaseWebConfig();
+  if (!config.configured) return null;
 
   const { initializeApp, getApps, getApp } = await import("firebase/app");
   const { getMessaging, getToken, onMessage, isSupported } = await import("firebase/messaging");
@@ -90,13 +93,13 @@ export async function enablePush(
         authDomain: `${config.projectId}.firebaseapp.com`,
       });
 
-  const query = new URLSearchParams({
+  const registration = await registerPwaServiceWorker({
     apiKey: config.apiKey,
     projectId: config.projectId,
     messagingSenderId: config.messagingSenderId,
     appId: config.appId,
   });
-  const registration = await navigator.serviceWorker.register(`${SW_PATH}?${query.toString()}`);
+  if (!registration) return null;
 
   const messaging = getMessaging(app);
   const token = await getToken(messaging, {
@@ -109,13 +112,26 @@ export async function enablePush(
   await registerDeviceToken({ data: { token, platform: "web" } });
 
   if (onForeground) {
-    onMessage(messaging, (payload) => {
+    foregroundUnsubscribe?.();
+    foregroundUnsubscribe = onMessage(messaging, (payload) => {
       const data = payload.data ?? {};
-      onForeground({
+      const message = {
         title: payload.notification?.title ?? data["title"] ?? "MKU Pulse",
         body: payload.notification?.body ?? data["body"] ?? "",
         url: data["url"] ?? "/notifications",
-      });
+      };
+      onForeground(message);
+      if (Notification.permission === "granted") {
+        void navigator.serviceWorker.ready.then((readyRegistration) =>
+          readyRegistration.showNotification(message.title, {
+            body: message.body,
+            icon: "/icons/icon-192.png",
+            badge: "/icons/icon-192.png",
+            tag: `mku-pulse-${Date.now()}`,
+            data: { url: message.url },
+          }),
+        );
+      }
     });
   }
 
@@ -133,11 +149,7 @@ export async function disablePush(): Promise<void> {
       /* nothing to clean up */
     }
   }
-  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-  const registrations = await navigator.serviceWorker.getRegistrations();
-  await Promise.all(
-    registrations
-      .filter((r) => r.active?.scriptURL.includes("firebase-messaging-sw.js"))
-      .map((r) => r.unregister()),
-  );
+  foregroundUnsubscribe?.();
+  foregroundUnsubscribe = null;
+  // Keep the root PWA worker registered for offline support after push is disabled.
 }

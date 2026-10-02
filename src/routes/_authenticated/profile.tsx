@@ -178,20 +178,19 @@ function ProfilePage() {
 
   const toggleFlag = async (key: "notifications_enabled" | "is_private", value: boolean) => {
     if (!user) return;
+    if (key === "notifications_enabled" && value) {
+      const token = await enablePush(undefined, true);
+      if (!token) toast.error("Allow notifications in your browser or app settings to get pushes");
+    }
     const patch = key === "is_private" ? { is_private: value } : { notifications_enabled: value };
     const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
     if (error) {
+      if (key === "notifications_enabled" && value) await disablePush();
       toast.error(error.message);
       return;
     }
     if (key === "notifications_enabled") {
-      if (value) {
-        const token = await enablePush();
-        if (!token)
-          toast.error("Allow notifications in your browser or app settings to get pushes");
-      } else {
-        await disablePush();
-      }
+      if (!value) await disablePush();
     }
     await refreshProfile();
   };

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#3f83bd" />
+    <meta name="description" content="MKU Pulse offline page" />
+    <title>You're offline — MKU Pulse</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: #f4faff;
+        color: #172c3d;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        padding: 24px;
+        place-items: center;
+      }
+      main {
+        width: min(100%, 440px);
+        padding: 32px;
+        border: 1px solid #dbe8f1;
+        border-radius: 24px;
+        background: white;
+        box-shadow: 0 18px 48px #1f4f6b14;
+        text-align: center;
+      }
+      img {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+      }
+      .brand {
+        margin: 12px 0 24px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+      .brand span {
+        color: #3f83bd;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(1.75rem, 7vw, 2.25rem);
+        letter-spacing: -0.04em;
+      }
+      p {
+        color: #526777;
+        line-height: 1.6;
+      }
+      .button {
+        display: inline-flex;
+        min-height: 44px;
+        margin-top: 12px;
+        padding: 0 20px;
+        align-items: center;
+        border: 0;
+        border-radius: 12px;
+        background: #3f83bd;
+        color: white;
+        font-weight: 650;
+        text-decoration: none;
+      }
+      .button:focus-visible {
+        outline: 3px solid #9bc9e8;
+        outline-offset: 3px;
+      }
+      .privacy {
+        margin-top: 24px;
+        font-size: 0.8rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icons/icon-192.png" width="72" height="72" alt="" />
+      <p class="brand">MKU<span>Pulse</span></p>
+      <h1>You're offline</h1>
+      <p>The live campus feed and messages need an internet connection. Reconnect and try again.</p>
+      <a class="button" href="/">Try again</a>
+      <p class="privacy">
+        MKU Pulse does not store private messages or account pages in the offline cache.
+      </p>
+    </main>
+  </body>
+</html>
