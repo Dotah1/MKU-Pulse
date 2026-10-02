@@ -124,6 +124,12 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'if (window.isSecureContext && "serviceWorker" in navigator) { navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(function () {}); }',
+          }}
+        />
       </head>
       <body>
         {children}
