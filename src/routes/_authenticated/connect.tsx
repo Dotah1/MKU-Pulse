@@ -100,18 +100,13 @@ function ConnectPage() {
     seen.add(user.id);
     seenProfileIds.current = seen;
 
-    // Only show the opposite gender.
-    const wanted =
-      profile?.gender === "male" ? "female" : profile?.gender === "female" ? "male" : null;
-
-    let query = supabase
+    const query = supabase
       .from("profiles")
       .select(
         "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_banned, is_private",
       )
       .eq("is_banned", false)
       .eq("is_private", false);
-    if (wanted) query = query.eq("gender", wanted);
     const { data, error } = await query
       .order("id", { ascending: true })
       .range(0, CANDIDATE_PAGE_SIZE - 1);
@@ -137,21 +132,18 @@ function ConnectPage() {
     ).length;
     setSuperToday(supers);
     setLoading(false);
-  }, [user, profile?.gender]);
+  }, [user]);
 
   const loadMoreCandidates = async () => {
     if (!user || loadingMoreCandidates || !hasMoreCandidates) return;
     setLoadingMoreCandidates(true);
-    const wanted =
-      profile?.gender === "male" ? "female" : profile?.gender === "female" ? "male" : null;
-    let query = supabase
+    const query = supabase
       .from("profiles")
       .select(
         "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_banned, is_private",
       )
       .eq("is_banned", false)
       .eq("is_private", false);
-    if (wanted) query = query.eq("gender", wanted);
     const offset = candidateOffset.current;
     try {
       const { data, error } = await query
