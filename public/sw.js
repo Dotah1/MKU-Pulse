@@ -1,6 +1,6 @@
 /* MKU Pulse PWA + Firebase Cloud Messaging service worker. */
-const SHELL_CACHE = "mku-pulse-shell-v1";
-const ASSET_CACHE = "mku-pulse-assets-v1";
+const SHELL_CACHE = "mku-pulse-shell-v2";
+const ASSET_CACHE = "mku-pulse-assets-v2";
 const OFFLINE_REFRESH_TAG = "mku-pulse-offline-refresh";
 const PERIODIC_REFRESH_TAG = "mku-pulse-periodic-refresh";
 const PUBLIC_PWA_ASSETS = [
