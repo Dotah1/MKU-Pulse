@@ -32,6 +32,33 @@ export type Database = {
         }
         Relationships: []
       }
+      campus_crushes: {
+        Row: {
+          compliment_tag: string
+          created_at: string
+          id: string
+          is_revealed: boolean
+          recipient_id: string
+          sender_id: string
+        }
+        Insert: {
+          compliment_tag: string
+          created_at?: string
+          id?: string
+          is_revealed?: boolean
+          recipient_id: string
+          sender_id: string
+        }
+        Update: {
+          compliment_tag?: string
+          created_at?: string
+          id?: string
+          is_revealed?: boolean
+          recipient_id?: string
+          sender_id?: string
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           created_at: string
@@ -591,10 +618,12 @@ export type Database = {
           interests: string[]
           is_banned: boolean
           is_private: boolean
+          last_active_on: string | null
           major: string
           notifications_enabled: boolean
           pending_tier: Database["public"]["Enums"]["sub_tier"] | null
           post_block_until: string | null
+          streak_count: number
           tier: Database["public"]["Enums"]["sub_tier"]
           tier_expires_at: string | null
           updated_at: string
@@ -610,10 +639,12 @@ export type Database = {
           interests?: string[]
           is_banned?: boolean
           is_private?: boolean
+          last_active_on?: string | null
           major?: string
           notifications_enabled?: boolean
           pending_tier?: Database["public"]["Enums"]["sub_tier"] | null
           post_block_until?: string | null
+          streak_count?: number
           tier?: Database["public"]["Enums"]["sub_tier"]
           tier_expires_at?: string | null
           updated_at?: string
@@ -629,10 +660,12 @@ export type Database = {
           interests?: string[]
           is_banned?: boolean
           is_private?: boolean
+          last_active_on?: string | null
           major?: string
           notifications_enabled?: boolean
           pending_tier?: Database["public"]["Enums"]["sub_tier"] | null
           post_block_until?: string | null
+          streak_count?: number
           tier?: Database["public"]["Enums"]["sub_tier"]
           tier_expires_at?: string | null
           updated_at?: string
@@ -773,6 +806,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_in_streak: { Args: { _today: string }; Returns: number }
       delete_expired_posts: { Args: never; Returns: number }
       effective_tier: {
         Args: { _user_id: string }
@@ -790,6 +824,20 @@ export type Database = {
         Returns: boolean
       }
       is_super_admin: { Args: never; Returns: boolean }
+      my_compliments: {
+        Args: never
+        Returns: {
+          compliment_tag: string
+          created_at: string
+          id: string
+          is_revealed: boolean
+          sender_id: string
+        }[]
+      }
+      send_compliment: {
+        Args: { _recipient: string; _tag: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "student" | "mentor" | "admin"
