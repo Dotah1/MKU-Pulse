@@ -30,7 +30,10 @@ export function SendCompliment({ recipientId, myId }: { recipientId: string; myI
       _tag: tag,
     });
     setBusy(false);
-    if (error) return toast.error("Could not send the compliment");
+    if (error) {
+      toast.error("Could not send the compliment");
+      return;
+    }
     setSent(tag);
     if (mutual) {
       toast.success("It's a Mutual Crush! 💞 Check your messages.");
@@ -118,7 +121,7 @@ export function ReceivedCompliments() {
                 <>
                   Mutual crush with{" "}
                   <Link to="/u/$id" params={{ id: c.sender_id }} className="text-primary underline">
-                    {people[c.sender_id].full_name}
+                    {people[c.sender_id]?.full_name}
                   </Link>
                 </>
               ) : (
