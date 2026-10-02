@@ -39,10 +39,18 @@
   ],
   "screenshots": [
     {
-      "src": "/screenshots/mku-pulse-home.png",
-      "sizes": "893x768",
+      "src": "/screenshots/mku-pulse-wide.png",
+      "sizes": "1440x900",
       "type": "image/png",
-      "label": "MKU Pulse campus home screen"
+      "form_factor": "wide",
+      "label": "MKU Pulse campus home on a desktop screen"
+    },
+    {
+      "src": "/screenshots/mku-pulse-narrow.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "MKU Pulse campus home on a mobile screen"
     }
   ],
   "icons": [
