@@ -317,36 +317,75 @@ function ChatPane({
   }, [messages.length, otherTyping]);
 
   useEffect(() => {
-    const channel = supabase
-      .channel(`chat-${conversation.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${conversation.id}`,
-        },
-        () => void load(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "typing_state",
-          filter: `conversation_id=eq.${conversation.id}`,
-        },
-        (payload) => {
-          const row = payload.new as { user_id?: string; updated_at?: string } | null;
-          if (!row?.user_id || row.user_id === user?.id) return;
-          setOtherTyping(true);
-          window.setTimeout(() => setOtherTyping(false), 3000);
-        },
-      )
-      .subscribe();
+    let activeChannel: ReturnType<typeof supabase.channel> | null = null;
+    let removePending: Promise<unknown> | null = null;
+    let disposed = false;
+    const isPageHidden = () => document.visibilityState === "hidden";
+
+    const removeActiveChannel = () => {
+      const channel = activeChannel;
+      if (!channel) return;
+      activeChannel = null;
+      removePending = supabase
+        .removeChannel(channel)
+        .catch((error: unknown) => {
+          console.warn("Could not pause the background chat channel", error);
+        })
+        .finally(() => {
+          removePending = null;
+        });
+    };
+
+    const subscribeToActiveChat = async () => {
+      if (disposed || isPageHidden() || activeChannel) return;
+      if (removePending) await removePending;
+      if (disposed || isPageHidden() || activeChannel) return;
+
+      activeChannel = supabase
+        .channel(`chat-${conversation.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "messages",
+            filter: `conversation_id=eq.${conversation.id}`,
+          },
+          () => void load(),
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "typing_state",
+            filter: `conversation_id=eq.${conversation.id}`,
+          },
+          (payload) => {
+            const row = payload.new as { user_id?: string; updated_at?: string } | null;
+            if (!row?.user_id || row.user_id === user?.id) return;
+            setOtherTyping(true);
+            window.setTimeout(() => setOtherTyping(false), 3000);
+          },
+        )
+        .subscribe();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        removeActiveChannel();
+      } else if (!activeChannel) {
+        void subscribeToActiveChat();
+        void load();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    void subscribeToActiveChat();
     return () => {
-      void supabase.removeChannel(channel);
+      disposed = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      removeActiveChannel();
     };
   }, [conversation.id, user?.id, load]);
 

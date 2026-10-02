@@ -32,6 +32,7 @@ import {
 } from "@/lib/campus";
 import { compressImageFile, uploadFile } from "@/lib/storage";
 import { disablePush, enablePush } from "@/lib/push";
+import { checkAndUpdateStreak } from "@/lib/campus-data";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({
@@ -63,6 +64,7 @@ function ProfilePage() {
   const [ownInterest, setOwnInterest] = useState("");
   const [saving, setSaving] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [pulseStreak, setPulseStreak] = useState<number | null>(null);
 
   const addOwnInterest = () => {
     const value = sanitizeText(ownInterest, 30).trim();
@@ -84,6 +86,10 @@ function ProfilePage() {
     setBio(profile.bio);
     setInterests(profile.interests ?? []);
   }, [profile]);
+
+  useEffect(() => {
+    setPulseStreak(checkAndUpdateStreak());
+  }, []);
 
   // Contact details live in a private table only the owner (and admin) can read.
   useEffect(() => {
@@ -230,10 +236,15 @@ function ProfilePage() {
             {profile?.full_name || "Your profile"}
           </h1>
           <p className="text-sm text-muted-foreground">{user?.email}</p>
-          <Badge variant="outline" className="mt-1 capitalize">
-            {limits.label} plan
-            {freeAccessMode ? " (free access mode)" : ""}
-          </Badge>
+          <div className="mt-1 flex flex-wrap gap-2">
+            <Badge variant="outline" className="capitalize">
+              {limits.label} plan
+              {freeAccessMode ? " (free access mode)" : ""}
+            </Badge>
+            {pulseStreak !== null && (
+              <Badge variant="secondary">🔥 {pulseStreak} Day Pulse Streak</Badge>
+            )}
+          </div>
         </div>
         <Button variant="ghost" className="ml-auto min-h-11" onClick={() => void handleSignOut()}>
           <LogOut className="mr-2 size-4" aria-hidden="true" />

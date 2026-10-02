@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { CampusToolsDialog } from "@/components/CampusToolsDialog";
 import { POST_MEDIA_MAX_BYTES, POST_VIDEO_MAX_SECONDS, sanitizeText } from "@/lib/campus";
 import { compressImageFile, uploadFile, videoDuration } from "@/lib/storage";
-import { countToday } from "@/lib/campus-data";
+import { checkAndUpdateStreak, countToday } from "@/lib/campus-data";
 
 const FEED_FILTERS = [
   { id: "all", label: "🔥 All Posts" },
@@ -124,6 +124,7 @@ function FeedPage() {
   const [loadingMorePosts, setLoadingMorePosts] = useState(false);
   const [hasMorePosts, setHasMorePosts] = useState(true);
   const [usedToday, setUsedToday] = useState(0);
+  const [pulseStreak, setPulseStreak] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<FeedFilter>("all");
   const postsOffset = useRef(0);
   const feedGeneration = useRef(0);
@@ -203,6 +204,10 @@ function FeedPage() {
     void countToday("posts", "user_id", user.id).then(setUsedToday);
   }, [user]);
 
+  useEffect(() => {
+    setPulseStreak(checkAndUpdateStreak());
+  }, []);
+
   const blockedUntil = profile?.post_block_until ?? null;
   const blocked = blockedUntil ? new Date(blockedUntil).getTime() > Date.now() : false;
 
@@ -211,11 +216,28 @@ function FeedPage() {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold">Campus feed</h1>
-          <p className="text-sm text-muted-foreground">
-            {tier === "free"
-              ? `${limits.postsPerDay - usedToday} of ${limits.postsPerDay} text posts left today · upgrade for photos & video`
-              : `${Math.max(0, limits.postsPerDay - usedToday)} posts left today on your ${limits.label} plan`}
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <p className="text-sm text-muted-foreground">
+              {tier === "free"
+                ? `${limits.postsPerDay - usedToday} of ${limits.postsPerDay} text posts left today · upgrade for photos & video`
+                : `${Math.max(0, limits.postsPerDay - usedToday)} posts left today on your ${limits.label} plan`}
+            </p>
+            {pulseStreak !== null && (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="min-h-9 rounded-full"
+                onClick={() =>
+                  toast.info(
+                    `You're on a ${pulseStreak}-day campus streak! Keep coming back daily to keep it alive.`,
+                  )
+                }
+              >
+                🔥 {pulseStreak} Day Pulse Streak
+              </Button>
+            )}
+          </div>
         </div>
         <CampusToolsDialog />
       </header>

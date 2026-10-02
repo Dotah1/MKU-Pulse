@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   countToday,
+  calculateRoommateCompatibility,
   fetchProfiles,
   getOrCreateConversation,
   type MiniProfile,
@@ -225,6 +226,14 @@ function ConnectPage() {
   }, [user, loadMatches]);
 
   const current = deck[0];
+  const compatibility = current
+    ? calculateRoommateCompatibility(
+        profile?.interests,
+        current.interests,
+        profile?.year_of_study,
+        current.year_of_study,
+      )
+    : null;
   const outOfSwipes = swipesToday >= limits.swipesPerDay;
 
   const swipe = async (action: SwipeAction) => {
@@ -483,6 +492,26 @@ function ConnectPage() {
                       Year {current.year_of_study} · {current.major || "Student"}
                     </p>
                     {current.bio && <p className="mt-2 text-sm">{current.bio}</p>}
+                    {compatibility && (
+                      <div className="mt-3 space-y-2">
+                        <Badge className="border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">
+                          🏠 {compatibility.percentage}% Roommate / Campus Match
+                        </Badge>
+                        {compatibility.sharedInterests.length > 0 && (
+                          <div
+                            className="flex flex-wrap items-center gap-1.5"
+                            aria-label="Shared interests"
+                          >
+                            <span className="text-xs text-muted-foreground">Shared:</span>
+                            {compatibility.sharedInterests.map((interest) => (
+                              <Badge key={interest} variant="outline" className="text-xs">
+                                #{interest.replace(/\s+/g, "")}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="mt-3 flex flex-wrap gap-1">
                       {(current.interests ?? []).slice(0, 6).map((interest) => (
                         <Badge key={interest} variant="secondary">
