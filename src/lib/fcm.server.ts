@@ -10,11 +10,43 @@ interface ServiceAccount {
   project_id: string;
 }
 
+interface FcmErrorDetail {
+  "@type"?: string;
+  errorCode?: string;
+  fieldViolations?: Array<{ field?: string; description?: string }>;
+}
+
+function isStaleFcmTokenError(body: string): boolean {
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: { status?: string; message?: string; details?: FcmErrorDetail[] };
+    };
+    const error = parsed.error;
+    if (!error) return false;
+    if (error.status === "UNREGISTERED") return true;
+
+    const details = error.details ?? [];
+    const fcmError = details.find((detail) => detail["@type"]?.endsWith("FcmError"));
+    if (fcmError?.errorCode === "UNREGISTERED") return true;
+    if (fcmError?.errorCode !== "INVALID_ARGUMENT") return false;
+
+    const tokenViolation = details
+      .flatMap((detail) => detail.fieldViolations ?? [])
+      .some((violation) =>
+        /token/i.test(`${violation.field ?? ""} ${violation.description ?? ""}`),
+      );
+    return tokenViolation || /registration token/i.test(error.message ?? "");
+  } catch {
+    return false;
+  }
+}
+
 export interface FcmPayload {
   title: string;
   body: string;
   url?: string;
   kind?: string;
+  ttlSeconds?: number;
 }
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
@@ -100,6 +132,13 @@ export async function sendFcmToTokens(
   payload: FcmPayload,
 ): Promise<{ sent: number; staleTokens: string[] }> {
   if (tokens.length === 0) return { sent: 0, staleTokens: [] };
+  const ttlSeconds =
+    payload.ttlSeconds === undefined
+      ? undefined
+      : Number.isFinite(payload.ttlSeconds)
+        ? Math.min(2_419_200, Math.floor(payload.ttlSeconds))
+        : 0;
+  if (ttlSeconds !== undefined && ttlSeconds <= 0) return { sent: 0, staleTokens: [] };
   const account = readServiceAccount();
   const accessToken = await getAccessToken(account);
   const endpoint = `https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`;
@@ -112,6 +151,8 @@ export async function sendFcmToTokens(
       ? `${requestedLink.pathname}${requestedLink.search}${requestedLink.hash}`
       : "/notifications";
   const clickLink = new URL(clickPath, appBase.origin).toString();
+  const eventId = requestedLink.searchParams.get("notification_event");
+  const notificationTag = `mku-pulse-${eventId ?? `${payload.kind ?? "general"}-${Date.now()}`}`;
 
   const staleTokens: string[] = [];
   let sent = 0;
@@ -125,15 +166,25 @@ export async function sendFcmToTokens(
           notification: { title: payload.title, body: payload.body },
           data: { title: payload.title, body: payload.body, url, kind: payload.kind ?? "general" },
           android: {
+            ...(ttlSeconds !== undefined ? { ttl: `${ttlSeconds}s` } : {}),
             priority: "HIGH",
-            notification: { channel_id: "campus_connect", default_sound: true },
+            notification: {
+              channel_id: "campus_connect",
+              tag: notificationTag,
+              default_sound: true,
+              default_vibrate_timings: true,
+            },
           },
           webpush: {
+            ...(ttlSeconds !== undefined ? { headers: { TTL: String(ttlSeconds) } } : {}),
             notification: {
               title: payload.title,
               body: payload.body,
               icon: "/icons/icon-192.png",
               badge: "/icons/icon-192.png",
+              tag: notificationTag,
+              renotify: false,
+              vibrate: [180, 80, 180],
             },
             fcm_options: { link: clickLink },
           },
@@ -154,9 +205,7 @@ export async function sendFcmToTokens(
         return;
       }
       const text = await res.text();
-      if (res.status === 404 || res.status === 400 || /UNREGISTERED|INVALID_ARGUMENT/.test(text)) {
-        staleTokens.push(token);
-      }
+      if (isStaleFcmTokenError(text)) staleTokens.push(token);
       console.error("FCM send failed", res.status, text.slice(0, 300));
     }),
   );

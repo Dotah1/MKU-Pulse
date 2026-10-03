@@ -6,6 +6,7 @@ import { UserAvatar } from "@/components/StoredMedia";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AnnouncementOnOpen } from "@/components/AnnouncementOnOpen";
 import { OneSignalOptInPrompt } from "@/components/OneSignalOptInPrompt";
+import { PushNotificationsBridge } from "@/components/PushNotificationsBridge";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-background pb-20 md:pb-0">
       <AnnouncementOnOpen />
       <OneSignalOptInPrompt />
+      <PushNotificationsBridge />
       <header className="sticky top-0 z-40 border-b border-border bg-card/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-5xl items-center gap-3 px-4">
           <Link to="/feed" className="font-display text-lg font-bold tracking-tight">

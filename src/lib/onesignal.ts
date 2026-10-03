@@ -1,4 +1,6 @@
 type OneSignalWebSdk = {
+  setConsentRequired(required: boolean): void;
+  setConsentGiven(given: boolean): void | Promise<void>;
   init(options: {
     appId: string;
     serviceWorkerPath: string;
@@ -6,6 +8,9 @@ type OneSignalWebSdk = {
     autoResubscribe: boolean;
     persistNotification: boolean;
   }): Promise<void>;
+  Notifications: {
+    isPushSupported(): boolean;
+  };
   User: {
     PushSubscription: {
       optIn(): Promise<void>;
@@ -33,6 +38,28 @@ const PROMPT_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 
 let sdkPromise: Promise<OneSignalWebSdk> | null = null;
 
+function isIosDevice(): boolean {
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
+function isStandaloneApp(): boolean {
+  return (
+    window.matchMedia?.("(display-mode: standalone)").matches === true ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
+function supportsOneSignalPush(sdk: OneSignalWebSdk): boolean {
+  try {
+    return sdk.Notifications.isPushSupported() && (!isIosDevice() || isStandaloneApp());
+  } catch {
+    return false;
+  }
+}
+
 function loadOneSignal(): Promise<OneSignalWebSdk> {
   if (typeof window === "undefined")
     return Promise.reject(new Error("OneSignal requires a browser"));
@@ -43,6 +70,9 @@ function loadOneSignal(): Promise<OneSignalWebSdk> {
     window.OneSignalDeferred = deferred;
     deferred.push(async (sdk) => {
       try {
+        // This must run before init so OneSignal cannot collect data or create
+        // a subscription until the student explicitly grants consent.
+        sdk.setConsentRequired(true);
         await sdk.init({
           appId: ONESIGNAL_APP_ID,
           serviceWorkerPath: ONESIGNAL_WORKER_PATH,
@@ -50,6 +80,7 @@ function loadOneSignal(): Promise<OneSignalWebSdk> {
           autoResubscribe: true,
           persistNotification: true,
         });
+        if (isOneSignalBroadcastsEnabled()) await sdk.setConsentGiven(true);
         resolve(sdk);
       } catch (error) {
         reject(error);
@@ -75,12 +106,12 @@ function loadOneSignal(): Promise<OneSignalWebSdk> {
   return sdkPromise;
 }
 
-function saveOptIn(enabled: boolean) {
+function saveOptIn(enabled: boolean): void {
   try {
     if (enabled) window.localStorage.setItem(OPT_IN_STORAGE_KEY, "true");
     else window.localStorage.removeItem(OPT_IN_STORAGE_KEY);
   } catch {
-    // Push remains enabled for this browser session if storage is unavailable.
+    // The SDK subscription state remains authoritative for the current session.
   }
 }
 
@@ -128,18 +159,17 @@ export function clearOneSignalPromptSuppression(userId: string): void {
   }
 }
 
-/** Prepare the SDK without asking for notification permission. */
-export async function prepareOneSignal(): Promise<void> {
-  await loadOneSignal();
+/** Prepare the SDK behind OneSignal's required consent gate without asking permission. */
+export async function prepareOneSignal(): Promise<boolean> {
+  return supportsOneSignalPush(await loadOneSignal());
 }
 
 /** Read the actual browser/device subscription state from OneSignal. */
 export async function isOneSignalPushSubscribed(): Promise<boolean | null> {
   try {
     const sdk = await loadOneSignal();
-    const optedIn = sdk.User.PushSubscription.optedIn;
-    if (optedIn === true) saveOptIn(true);
-    return optedIn;
+    if (!supportsOneSignalPush(sdk)) return null;
+    return sdk.User.PushSubscription.optedIn;
   } catch {
     return null;
   }
@@ -157,21 +187,36 @@ export async function enableOneSignalBroadcasts(): Promise<boolean> {
     return false;
   }
 
+  let sdk: OneSignalWebSdk | null = null;
   try {
-    const sdk = await loadOneSignal();
+    sdk = await loadOneSignal();
+    if (!supportsOneSignalPush(sdk)) return false;
+    await sdk.setConsentGiven(true);
     await sdk.User.PushSubscription.optIn();
     const optedIn = sdk.User.PushSubscription.optedIn === true;
-    if (optedIn) saveOptIn(true);
-    return optedIn;
+    if (optedIn) {
+      saveOptIn(true);
+      return true;
+    }
   } catch {
-    return false;
+    // Revoke the temporary collection consent if subscription creation failed.
   }
+  if (sdk) {
+    try {
+      await sdk.setConsentGiven(false);
+    } catch {
+      // The failed subscription remains blocked by the consent gate.
+    }
+  }
+  saveOptIn(false);
+  return false;
 }
 
-/** Opts out of OneSignal campaigns when the student turns the preference off. */
+/** Opts out of OneSignal campaigns and suspends SDK collection until renewed consent. */
 export async function disableOneSignalBroadcasts(): Promise<void> {
   if (typeof window === "undefined") return;
   const sdk = await loadOneSignal();
   await sdk.User.PushSubscription.optOut();
+  await sdk.setConsentGiven(false);
   saveOptIn(false);
 }

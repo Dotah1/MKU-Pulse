@@ -34,13 +34,18 @@ export const getFirebaseWebConfig = createServerFn({ method: "GET" }).handler(
 /** Saves (or refreshes) the caller's FCM device token. */
 export const registerDeviceToken = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { token: string; platform?: string }) => {
+  .inputValidator((input: { token: string; platform?: string; expectedUserId: string }) => {
     const token = String(input?.token ?? "").trim();
     if (token.length < 20 || token.length > 4096) throw new Error("Invalid device token");
     const platform = input?.platform === "android" ? "android" : "web";
-    return { token, platform };
+    const expectedUserId = String(input?.expectedUserId ?? "").trim();
+    if (!expectedUserId) throw new Error("Expected account is required for push registration");
+    return { token, platform, expectedUserId };
   })
   .handler(async ({ data, context }) => {
+    if (data.expectedUserId !== context.userId) {
+      throw new Error("Signed-in account changed; push registration was cancelled");
+    }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // A token belongs to one device: re-registering moves it to the current user.
     const { error } = await supabaseAdmin.from("device_tokens").upsert(
@@ -59,9 +64,17 @@ export const registerDeviceToken = createServerFn({ method: "POST" })
 /** Removes a device token (sign-out or notifications turned off). */
 export const unregisterDeviceToken = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { token: string }) => ({ token: String(input?.token ?? "").trim() }))
+  .inputValidator((input: { token: string; expectedUserId: string }) => {
+    const token = String(input?.token ?? "").trim();
+    const expectedUserId = String(input?.expectedUserId ?? "").trim();
+    if (!expectedUserId) throw new Error("Expected account is required for push cleanup");
+    return { token, expectedUserId };
+  })
   .handler(async ({ data, context }) => {
     if (!data.token) return { ok: true };
+    if (data.expectedUserId !== context.userId) {
+      throw new Error("Signed-in account changed; push token cleanup was not confirmed");
+    }
     const { error } = await context.supabase
       .from("device_tokens")
       .delete()
@@ -432,7 +445,10 @@ export const notifyUser = createServerFn({ method: "POST" })
         throw denied();
     }
 
-    const notificationUrl = withEventKey(data.url, data.eventId);
+    // Reuse source event IDs when available; otherwise give this alert one
+    // stable key shared by its in-app row, FCM payload, and foreground feedback.
+    const notificationEventId = data.eventId ?? crypto.randomUUID();
+    const notificationUrl = withEventKey(data.url, notificationEventId);
     const recipientsToInsert: string[] = [];
     for (const id of recipients) {
       if (data.eventId) {
@@ -511,7 +527,7 @@ export const notifyUser = createServerFn({ method: "POST" })
     }
   });
 
-/** Creates in-app-only announcement records for all students; it never sends device push. */
+/** Creates next-open announcement records and sends expiry-bounded push to consented devices. */
 export const broadcastAnnouncement = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator(
@@ -536,22 +552,29 @@ export const broadcastAnnouncement = createServerFn({ method: "POST" })
     }
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const announcementUrl = createAnnouncementUrl(
-      data.imagePath,
-      Date.now() + data.durationHours * 3_600_000,
+    const expiresAt = Date.now() + data.durationHours * 3_600_000;
+    const announcementUrl = withEventKey(
+      createAnnouncementUrl(data.imagePath, expiresAt),
+      crypto.randomUUID(),
     );
     const recipientIds: string[] = [];
+    const pushRecipientIds = new Set<string>();
     const pageSize = 1000;
     let offset = 0;
 
     while (true) {
       const { data: profiles, error } = await supabaseAdmin
         .from("profiles")
-        .select("id")
+        .select("id, notifications_enabled")
+        .order("id", { ascending: true })
         .range(offset, offset + pageSize - 1);
       if (error) throw new Error(error.message);
       const page = profiles ?? [];
-      recipientIds.push(...page.map((profile) => profile.id).filter((id) => id !== context.userId));
+      for (const profile of page) {
+        if (profile.id === context.userId) continue;
+        recipientIds.push(profile.id);
+        if (profile.notifications_enabled !== false) pushRecipientIds.add(profile.id);
+      }
       if (page.length < pageSize) break;
       offset += pageSize;
     }
@@ -569,5 +592,42 @@ export const broadcastAnnouncement = createServerFn({ method: "POST" })
       if (error) throw new Error(error.message);
     }
 
-    return { recipients: recipients.length };
+    let sent = 0;
+    try {
+      const { sendFcmToTokens } = await import("./fcm.server");
+      const pushRecipients = [...pushRecipientIds];
+      const recipientBatchSize = 500;
+      const tokenBatchSize = 100;
+      for (let start = 0; start < pushRecipients.length; start += recipientBatchSize) {
+        const recipientBatch = pushRecipients.slice(start, start + recipientBatchSize);
+        const { data: tokenRows, error: tokenError } = await supabaseAdmin
+          .from("device_tokens")
+          .select("token")
+          .in("user_id", recipientBatch);
+        if (tokenError) throw new Error(tokenError.message);
+        const tokens = (tokenRows ?? []).map((row) => row.token);
+        for (let tokenStart = 0; tokenStart < tokens.length; tokenStart += tokenBatchSize) {
+          const tokenBatch = tokens.slice(tokenStart, tokenStart + tokenBatchSize);
+          const ttlSeconds = Math.floor((expiresAt - Date.now()) / 1000);
+          if (ttlSeconds <= 0) break;
+          const result = await sendFcmToTokens(tokenBatch, {
+            title: data.title,
+            body: data.body,
+            url: announcementUrl,
+            kind: "announcement",
+            ttlSeconds,
+          });
+          sent += result.sent;
+          if (result.staleTokens.length > 0) {
+            await supabaseAdmin.from("device_tokens").delete().in("token", result.staleTokens);
+          }
+        }
+      }
+    } catch (error) {
+      // In-app records already exist; missing Firebase configuration must not
+      // prevent an admin announcement from being queued for the next app open.
+      console.error("Announcement push delivery failed", error);
+    }
+
+    return { recipients: recipients.length, sent };
   });

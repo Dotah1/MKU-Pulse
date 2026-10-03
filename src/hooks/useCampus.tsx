@@ -8,9 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { disablePush, enablePush } from "@/lib/push";
+import { disablePush } from "@/lib/push";
 import {
   ADMIN_EMAIL,
   TIER_LIMITS,
@@ -143,21 +142,6 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     };
   }, [session, profile, loadProfile]);
 
-  // Register FCM only after permission has already been granted or the user has
-  // supplied a native token. The profile setting requests browser permission.
-  const pushEnabled = Boolean(profile) && profile?.notifications_enabled !== false;
-  useEffect(() => {
-    if (typeof window === "undefined" || !session?.user.id || !pushEnabled) return;
-    let cancelled = false;
-    void enablePush((message) => {
-      if (cancelled) return;
-      toast(message.title, { description: message.body });
-    }).catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [session?.user.id, pushEnabled]);
-
   const email = session?.user.email?.toLowerCase() ?? "";
   const isAdmin = email === ADMIN_EMAIL;
   const tier = effectiveTier(profile, freeAccessMode);
@@ -180,8 +164,12 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       setFreeAccessModeLocal: setFreeAccessMode,
       setPaymentInfoLocal: setPaymentInfo,
       signOut: async () => {
-        await disablePush();
-        await supabase.auth.signOut();
+        const userId = session?.user.id;
+        if (userId && !(await disablePush(userId))) {
+          throw new Error("Could not confirm device push-token cleanup; sign-out was paused");
+        }
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
       },
     }),
     [

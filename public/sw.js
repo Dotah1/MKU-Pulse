@@ -156,11 +156,21 @@ if (firebaseConfig.apiKey && firebaseConfig.messagingSenderId && firebaseConfig.
     if (payload.notification) return;
     const data = payload.data || {};
     const title = data.title || "MKU Pulse";
+    const url = data.url || "/notifications";
+    let tag;
+    try {
+      const eventId = new URL(url, self.location.origin).searchParams.get("notification_event");
+      if (eventId) tag = `mku-pulse-${eventId}`;
+    } catch {
+      // Keep a standard, ungrouped notification for malformed event URLs.
+    }
     return self.registration.showNotification(title, {
       body: data.body || "",
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
-      data: { url: data.url || "/notifications" },
+      vibrate: [180, 80, 180],
+      ...(tag ? { tag, renotify: false } : {}),
+      data: { url },
     });
   });
 }

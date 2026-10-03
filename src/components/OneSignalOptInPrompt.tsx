@@ -2,9 +2,17 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useCampus } from "@/hooks/useCampus";
 import {
+  getCurrentPushToken,
+  hasNativePushToken,
+  hasPushConsent,
+  isWebPushSupported,
+  requestPushConsent,
+} from "@/lib/push";
+import {
   enableOneSignalBroadcasts,
-  isOneSignalPushSubscribed,
+  isOneSignalBroadcastsEnabled,
   isOneSignalPromptSuppressed,
+  isOneSignalPushSubscribed,
   prepareOneSignal,
   suppressOneSignalPrompt,
   clearOneSignalPromptSuppression,
@@ -20,25 +28,33 @@ import {
 } from "@/components/ui/dialog";
 
 const ACTIVE_DELAY_MS = 60_000;
+
+type PromptTargets = { app: boolean; oneSignal: boolean };
+const NO_TARGETS: PromptTargets = { app: false, oneSignal: false };
+
 export function OneSignalOptInPrompt() {
-  const { user } = useCampus();
+  const { user, profile } = useCampus();
   const userId = user?.id ?? null;
+  const profileReady = Boolean(userId && profile?.id === userId);
+  const notificationsEnabled = profileReady && profile?.notifications_enabled !== false;
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [targets, setTargets] = useState<PromptTargets>(NO_TARGETS);
 
   useEffect(() => {
     setOpen(false);
-    if (!userId) return;
-
-    if (
-      !window.isSecureContext ||
-      !("serviceWorker" in navigator) ||
-      !("Notification" in window) ||
-      Notification.permission === "denied" ||
-      isOneSignalPromptSuppressed(userId)
-    ) {
+    setTargets(NO_TARGETS);
+    if (!userId || !profileReady || !notificationsEnabled || isOneSignalPromptSuppressed(userId)) {
       return;
     }
+
+    const nativeAvailable = hasNativePushToken();
+    const webPushContextAvailable =
+      window.isSecureContext &&
+      "serviceWorker" in navigator &&
+      "Notification" in window &&
+      Notification.permission !== "denied";
+    if (!nativeAvailable && !webPushContextAvailable) return;
 
     let cancelled = false;
     let remaining = ACTIVE_DELAY_MS;
@@ -47,20 +63,25 @@ export function OneSignalOptInPrompt() {
 
     const maybePrompt = async () => {
       if (cancelled || isOneSignalPromptSuppressed(userId)) return;
-      try {
-        await prepareOneSignal();
-      } catch {
+
+      const [oneSignalSupported, appSupported] = await Promise.all([
+        webPushContextAvailable ? prepareOneSignal().catch(() => false) : false,
+        nativeAvailable ? Promise.resolve(true) : isWebPushSupported(),
+      ]);
+      if (cancelled || document.visibilityState === "hidden" || profile?.id !== userId) {
         return;
       }
-      const subscribed = await isOneSignalPushSubscribed();
-      if (
-        cancelled ||
-        subscribed !== false ||
-        document.visibilityState === "hidden" ||
-        Notification.permission === "denied"
-      ) {
-        return;
-      }
+
+      const oneSignalSubscribed =
+        oneSignalSupported && isOneSignalBroadcastsEnabled()
+          ? await isOneSignalPushSubscribed()
+          : false;
+      const appPushReady = getCurrentPushToken(userId) !== null || hasPushConsent(userId);
+      const needsOneSignal = oneSignalSupported && oneSignalSubscribed !== true;
+      const needsAppPush = appSupported && !appPushReady;
+      if (!needsOneSignal && !needsAppPush) return;
+
+      setTargets({ app: needsAppPush, oneSignal: needsOneSignal });
       setOpen(true);
     };
 
@@ -94,29 +115,42 @@ export function OneSignalOptInPrompt() {
       pauseTimer();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [userId]);
+  }, [userId, profileReady, profile?.id, notificationsEnabled]);
 
   const decline = () => {
     if (userId) suppressOneSignalPrompt(userId);
     setOpen(false);
+    setTargets(NO_TARGETS);
   };
 
   const accept = async () => {
-    if (busy) return;
+    if (busy || !userId) return;
     setBusy(true);
-    const subscribed = await enableOneSignalBroadcasts();
-    setBusy(false);
-    if (!subscribed) {
-      toast.error(
-        "Notifications could not be enabled. Check your browser permission settings and try again.",
-      );
-      return;
-    }
-    if (userId) {
+    try {
+      const oneSignalReady = targets.oneSignal ? await enableOneSignalBroadcasts() : false;
+      const appPushReady =
+        targets.app && notificationsEnabled ? await requestPushConsent(userId) : false;
+      if (!oneSignalReady && !appPushReady) {
+        toast.error(
+          "Notifications could not be enabled. Check this device's notification permission and try again.",
+        );
+        return;
+      }
       clearOneSignalPromptSuppression(userId);
+      setOpen(false);
+      setTargets(NO_TARGETS);
+      if (oneSignalReady && appPushReady) {
+        toast.success("This device is subscribed to MKU Pulse push alerts.");
+      } else if (appPushReady) {
+        toast.success("Message and activity alerts are enabled on this device.");
+      } else {
+        toast.success("Campus broadcast alerts are enabled on this device.");
+      }
+    } catch {
+      toast.error("Could not enable notifications. Check your connection and device settings.");
+    } finally {
+      setBusy(false);
     }
-    setOpen(false);
-    toast.success("This device is subscribed to MKU Pulse campus alerts.");
   };
 
   return (
@@ -131,8 +165,8 @@ export function OneSignalOptInPrompt() {
         <DialogHeader>
           <DialogTitle>Get MKU Pulse campus alerts?</DialogTitle>
           <DialogDescription>
-            Subscribe this device to campus broadcasts and important updates. You can change your
-            choice later in Profile preferences.
+            Allow system notifications for new messages, matches, and campus activity—even when the
+            app is closed. You can change your notification preferences later in Profile.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2 sm:gap-2">

@@ -31,7 +31,7 @@ import {
   type Tier,
 } from "@/lib/campus";
 import { compressImageFile, uploadFile } from "@/lib/storage";
-import { disablePush, enablePush } from "@/lib/push";
+import { disablePush, requestPushConsent, revokePushConsent } from "@/lib/push";
 import {
   disableOneSignalBroadcasts,
   enableOneSignalBroadcasts,
@@ -192,18 +192,28 @@ function ProfilePage() {
   const toggleFlag = async (key: "notifications_enabled" | "is_private", value: boolean) => {
     if (!user) return;
     if (key === "notifications_enabled" && value) {
-      const token = await enablePush(undefined, true);
-      if (!token) toast.error("Allow notifications in your browser or app settings to get pushes");
+      const consented = await requestPushConsent(user.id);
+      if (!consented) {
+        toast.error("Allow notifications in your browser or app settings to get pushes");
+        return;
+      }
+    }
+    if (key === "notifications_enabled" && !value) {
+      if (!(await disablePush(user.id))) {
+        toast.error("Could not remove this device's push token. Please try again while online.");
+        return;
+      }
+      revokePushConsent(user.id);
     }
     const patch = key === "is_private" ? { is_private: value } : { notifications_enabled: value };
     const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
     if (error) {
-      if (key === "notifications_enabled" && value) await disablePush();
+      if (key === "notifications_enabled" && value) {
+        await disablePush(user.id);
+        revokePushConsent(user.id);
+      }
       toast.error(error.message);
       return;
-    }
-    if (key === "notifications_enabled") {
-      if (!value) await disablePush();
     }
     await refreshProfile();
   };
@@ -236,8 +246,12 @@ function ProfilePage() {
   };
 
   const handleSignOut = async () => {
-    await signOut();
-    void navigate({ to: "/auth", search: { mode: "signin" }, replace: true });
+    try {
+      await signOut();
+      void navigate({ to: "/auth", search: { mode: "signin" }, replace: true });
+    } catch {
+      toast.error("Could not safely sign out because device push cleanup was not confirmed.");
+    }
   };
 
   return (
@@ -500,7 +514,8 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
       .from("payment_requests")
       .select("id, tier, amount, mpesa_code, status, admin_note, created_at")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
     setRequests((data ?? []) as PaymentRow[]);
   }, [user]);
 
