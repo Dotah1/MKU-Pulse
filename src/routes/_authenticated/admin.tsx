@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { notify } from "@/lib/notify";
 import { broadcastAnnouncement } from "@/lib/notifications.functions";
 import { deleteUserAccount } from "@/lib/admin.functions";
+import { deletePostWithMedia } from "@/lib/media.functions";
 import { useCampus } from "@/hooks/useCampus";
 import { UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
@@ -312,18 +313,27 @@ function AdminPage() {
   };
 
   const resolveReport = async (row: ReportRow, ban: boolean) => {
-    await supabase
-      .from("reports")
-      .update({ status: ban ? "approved" : "rejected" })
-      .eq("id", row.id);
-    if (ban && row.target_type === "user") {
-      await supabase.from("profiles").update({ is_banned: true }).eq("id", row.target_id);
+    try {
+      if (ban && row.target_type === "post") {
+        await deletePostWithMedia({ data: { postId: row.target_id } });
+      }
+      if (ban && row.target_type === "user") {
+        const { error } = await supabase
+          .from("profiles")
+          .update({ is_banned: true })
+          .eq("id", row.target_id);
+        if (error) throw error;
+      }
+      const { error } = await supabase
+        .from("reports")
+        .update({ status: ban ? "approved" : "rejected" })
+        .eq("id", row.id);
+      if (error) throw error;
+      toast.success("Report resolved");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not resolve this report");
     }
-    if (ban && row.target_type === "post") {
-      await supabase.from("posts").delete().eq("id", row.target_id);
-    }
-    toast.success("Report resolved");
-    await load();
   };
 
   const postAnnouncement = async () => {

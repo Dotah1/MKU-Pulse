@@ -10,7 +10,8 @@ export const deletePostWithMedia = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ postId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    const { data: post, error } = await context.supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: post, error } = await supabaseAdmin
       .from("posts")
       .select("id, user_id, image_url, video_url")
       .eq("id", data.postId)
@@ -19,16 +20,19 @@ export const deletePostWithMedia = createServerFn({ method: "POST" })
     if (!post) return { ok: true };
 
     if (post.user_id !== context.userId) {
-      const { data: isAdmin } = await context.supabase.rpc("has_role", {
+      const { data: isAdmin, error: roleError } = await context.supabase.rpc("has_role", {
         _user_id: context.userId,
         _role: "admin",
       });
+      if (roleError) throw new Error(roleError.message);
       if (!isAdmin) throw new Error("You can only delete your own posts");
     }
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const paths = [post.image_url, post.video_url].filter(Boolean) as string[];
-    if (paths.length > 0) await supabaseAdmin.storage.from("media").remove(paths);
+    if (paths.length > 0) {
+      const { error: storageError } = await supabaseAdmin.storage.from("media").remove(paths);
+      if (storageError) throw new Error(`Could not delete post media: ${storageError.message}`);
+    }
     const { error: delError } = await supabaseAdmin.from("posts").delete().eq("id", post.id);
     if (delError) throw new Error(delError.message);
     return { ok: true };
@@ -47,13 +51,19 @@ export const deletePollWithMedia = createServerFn({ method: "POST" })
     if (!isAdmin) throw new Error("Admins only");
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: poll } = await supabaseAdmin
+    const { data: poll, error: pollError } = await supabaseAdmin
       .from("polls")
       .select("id, image_url")
       .eq("id", data.pollId)
       .maybeSingle();
+    if (pollError) throw new Error(pollError.message);
     if (!poll) return { ok: true };
-    if (poll.image_url) await supabaseAdmin.storage.from("media").remove([poll.image_url]);
+    if (poll.image_url) {
+      const { error: storageError } = await supabaseAdmin.storage
+        .from("media")
+        .remove([poll.image_url]);
+      if (storageError) throw new Error(`Could not delete poll media: ${storageError.message}`);
+    }
     const { error } = await supabaseAdmin.from("polls").delete().eq("id", poll.id);
     if (error) throw new Error(error.message);
     return { ok: true };

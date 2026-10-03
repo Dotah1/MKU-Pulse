@@ -22,30 +22,61 @@ export const Route = createFileRoute("/api/public/purge-expired-posts")({
         }
 
         const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        const { data: expired, error } = await supabaseAdmin
-          .from("posts")
-          .select("id, image_url, video_url")
-          .lt("created_at", cutoff);
-        if (error) return new Response(error.message, { status: 500 });
+        const batchSize = 100;
+        const maxBatches = 10;
+        let removed = 0;
+        let files = 0;
+        let batches = 0;
 
-        const rows = expired ?? [];
-        if (rows.length === 0) return Response.json({ removed: 0 });
+        while (batches < maxBatches) {
+          const { data: expired, error } = await supabaseAdmin
+            .from("posts")
+            .select("id, image_url, video_url")
+            .lt("created_at", cutoff)
+            .order("created_at", { ascending: true })
+            .limit(batchSize);
+          if (error) return Response.json({ error: error.message }, { status: 500 });
 
-        const paths = rows
-          .flatMap((p) => [p.image_url, p.video_url])
-          .filter((p): p is string => Boolean(p));
-        if (paths.length > 0) await supabaseAdmin.storage.from("media").remove(paths);
+          const rows = expired ?? [];
+          if (rows.length === 0) break;
 
-        const { error: delError } = await supabaseAdmin
-          .from("posts")
-          .delete()
-          .in(
-            "id",
-            rows.map((p) => p.id),
-          );
-        if (delError) return new Response(delError.message, { status: 500 });
+          const paths = rows
+            .flatMap((post) => [post.image_url, post.video_url])
+            .filter((path): path is string => Boolean(path));
+          if (paths.length > 0) {
+            const { error: storageError } = await supabaseAdmin.storage.from("media").remove(paths);
+            if (storageError) {
+              return Response.json({ error: storageError.message }, { status: 500 });
+            }
+          }
 
-        return Response.json({ removed: rows.length, files: paths.length });
+          const { error: deleteError } = await supabaseAdmin
+            .from("posts")
+            .delete()
+            .in(
+              "id",
+              rows.map((post) => post.id),
+            );
+          if (deleteError) return Response.json({ error: deleteError.message }, { status: 500 });
+
+          removed += rows.length;
+          files += paths.length;
+          batches += 1;
+          if (rows.length < batchSize) break;
+        }
+
+        let hasMore = false;
+        if (batches === maxBatches) {
+          const { data: remaining, error } = await supabaseAdmin
+            .from("posts")
+            .select("id")
+            .lt("created_at", cutoff)
+            .limit(1);
+          if (error) return Response.json({ error: error.message }, { status: 500 });
+          hasMore = Boolean(remaining?.length);
+        }
+
+        return Response.json({ removed, files, hasMore });
       },
     },
   },

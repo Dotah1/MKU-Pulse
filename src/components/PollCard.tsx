@@ -6,6 +6,7 @@ import { useCampus } from "@/hooks/useCampus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StoredImage } from "@/components/StoredMedia";
+import { useNearViewport } from "@/hooks/useNearViewport";
 import { deletePollWithMedia } from "@/lib/media.functions";
 import { timeAgo } from "@/lib/campus";
 import { shareToWhatsApp } from "@/lib/share";
@@ -42,6 +43,8 @@ export function PollCard({
   const [total, setTotal] = useState(0);
   const [myOption, setMyOption] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pollRef, isNearViewport] = useNearViewport<HTMLElement>("240px 0px", false);
+  const [hasBeenNearViewport, setHasBeenNearViewport] = useState(false);
 
   const closed =
     !poll.is_active || (poll.closes_at ? new Date(poll.closes_at).getTime() < Date.now() : false);
@@ -60,8 +63,12 @@ export function PollCard({
   }, [poll.id, user?.id]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (isNearViewport) void load();
+  }, [load, isNearViewport]);
+
+  useEffect(() => {
+    if (isNearViewport) setHasBeenNearViewport(true);
+  }, [isNearViewport]);
 
   useEffect(() => {
     if (typeof window === "undefined" || window.location.hash !== `#poll-${poll.id}`) return;
@@ -74,6 +81,7 @@ export function PollCard({
   }, [poll.id]);
 
   useEffect(() => {
+    if (!isNearViewport || closed) return;
     const channel = supabase
       .channel(`poll-${poll.id}`)
       .on(
@@ -85,7 +93,7 @@ export function PollCard({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [poll.id, load]);
+  }, [poll.id, load, isNearViewport, closed]);
 
   const vote = async (optionId: string) => {
     if (!user || closed) return;
@@ -130,6 +138,7 @@ export function PollCard({
 
   return (
     <article
+      ref={pollRef}
       id={`poll-${poll.id}`}
       className="scroll-mt-24 rounded-2xl border border-primary/40 bg-primary/5 p-4"
     >
@@ -167,7 +176,7 @@ export function PollCard({
         )}
       </div>
       <h2 className="mt-2 font-display text-base font-semibold">{poll.question}</h2>
-      {poll.image_url && (
+      {hasBeenNearViewport && poll.image_url && (
         <StoredImage
           path={poll.image_url}
           alt="Poll picture"

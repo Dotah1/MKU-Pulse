@@ -46,7 +46,12 @@ export function UserAvatar({
       )}
     >
       {url ? (
-        <img src={url} alt={`${name}'s profile photo`} className="size-full object-cover" />
+        <img
+          src={url}
+          alt={`${name}'s profile photo`}
+          loading="lazy"
+          className="size-full object-cover"
+        />
       ) : (
         <span aria-hidden="true">{initials || "?"}</span>
       )}
@@ -88,6 +93,7 @@ export function StoredVideo({
       src={limit ? `${url}#t=0,${limit}` : url}
       controls
       playsInline
+      preload="none"
       className={className}
       onTimeUpdate={
         limit

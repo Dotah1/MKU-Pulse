@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCampus } from "@/hooks/useCampus";
+import { useNearViewport } from "@/hooks/useNearViewport";
 import { StoredImage, StoredVideo, UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -105,8 +106,10 @@ export function PostCard({
   const [reporting, setReporting] = useState(false);
 
   const mine = user?.id === post.user_id;
+  const [cardRef, isNearViewport] = useNearViewport<HTMLElement>();
 
   useEffect(() => {
+    if (!isNearViewport) return;
     let active = true;
     void (async () => {
       const [{ count }, { data: mineLike }, { count: comments }, { data: myReport }] =
@@ -142,7 +145,7 @@ export function PostCard({
     return () => {
       active = false;
     };
-  }, [post.id, user?.id]);
+  }, [post.id, user?.id, isNearViewport]);
 
   const toggleLike = async () => {
     if (!user) return;
@@ -311,11 +314,16 @@ export function PostCard({
 
   return (
     <article
+      ref={cardRef}
       className={`rounded-2xl border bg-card p-4 ${post.is_announcement ? "border-accent/50 bg-accent/5" : "border-border"}`}
     >
       <div className="flex items-center gap-3">
         <Link to="/u/$id" params={{ id: post.user_id }} aria-label={`View ${name}'s profile`}>
-          <UserAvatar path={author?.avatar_url} name={name} className="size-10" />
+          <UserAvatar
+            path={isNearViewport ? author?.avatar_url : null}
+            name={name}
+            className="size-10"
+          />
         </Link>
         <div className="min-w-0">
           <Link to="/u/$id" params={{ id: post.user_id }} className="block">
@@ -349,14 +357,14 @@ export function PostCard({
       )}
 
       {post.content && <p className="mt-3 whitespace-pre-wrap text-sm">{post.content}</p>}
-      {post.image_url && (
+      {isNearViewport && post.image_url && (
         <StoredImage
           path={post.image_url}
           alt="Post attachment"
           className="mt-3 max-h-96 w-full rounded-xl object-cover"
         />
       )}
-      {post.video_url && (
+      {isNearViewport && post.video_url && (
         <StoredVideo
           path={post.video_url}
           maxSeconds={post.video_seconds}
