@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BarChart3, Share2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,6 +45,7 @@ export function PollCard({
   const [busy, setBusy] = useState(false);
   const [pollRef, isNearViewport] = useNearViewport<HTMLElement>("240px 0px", false);
   const [hasBeenNearViewport, setHasBeenNearViewport] = useState(false);
+  const refreshTimer = useRef<number | null>(null);
 
   const closed =
     !poll.is_active || (poll.closes_at ? new Date(poll.closes_at).getTime() < Date.now() : false);
@@ -61,6 +62,14 @@ export function PollCard({
     setTotal(rows.length);
     setMyOption(rows.find((r) => r.user_id === user?.id)?.option_id ?? null);
   }, [poll.id, user?.id]);
+
+  const scheduleLoad = useCallback(() => {
+    if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);
+    refreshTimer.current = window.setTimeout(() => {
+      refreshTimer.current = null;
+      void load();
+    }, 300);
+  }, [load]);
 
   useEffect(() => {
     if (isNearViewport) void load();
@@ -87,13 +96,17 @@ export function PollCard({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "poll_votes", filter: `poll_id=eq.${poll.id}` },
-        () => void load(),
+        scheduleLoad,
       )
       .subscribe();
     return () => {
+      if (refreshTimer.current !== null) {
+        window.clearTimeout(refreshTimer.current);
+        refreshTimer.current = null;
+      }
       void supabase.removeChannel(channel);
     };
-  }, [poll.id, load, isNearViewport, closed]);
+  }, [poll.id, scheduleLoad, isNearViewport, closed]);
 
   const vote = async (optionId: string) => {
     if (!user || closed) return;
@@ -113,6 +126,10 @@ export function PollCard({
       return;
     }
     setMyOption(optionId);
+    if (refreshTimer.current !== null) {
+      window.clearTimeout(refreshTimer.current);
+      refreshTimer.current = null;
+    }
     if (isFirstVote && poll.created_by !== user.id) {
       void notify({
         recipientIds: poll.created_by,
