@@ -440,7 +440,7 @@ function ChatPane({
     setSending(false);
     void notify({
       recipientIds: otherId,
-      title: `New message from ${other?.full_name ?? "a student"}`,
+      title: "New message",
       body: text.slice(0, 120),
       url: `/messages?c=${conversation.id}`,
       kind: "message",

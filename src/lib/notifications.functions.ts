@@ -182,6 +182,7 @@ export const notifyUser = createServerFn({ method: "POST" })
     const target = new URL(data.url, "https://mku-pulse.invalid");
     const eventId = data.eventId;
     let eventOccurredAt: string | null = null;
+    let notificationTitle = data.title;
     const requireEventId = () => {
       if (!eventId) throw new Error("A persisted event ID is required");
       return eventId;
@@ -206,6 +207,16 @@ export const notifyUser = createServerFn({ method: "POST" })
           throw denied();
         }
         eventOccurredAt = message.created_at;
+        const { data: senderProfile, error: senderProfileError } = await supabaseAdmin
+          .from("profiles")
+          .select("full_name")
+          .eq("id", context.userId)
+          .maybeSingle();
+        if (senderProfileError) throw new Error(senderProfileError.message);
+        notificationTitle = clean(
+          `New message from ${senderProfile?.full_name || "a student"}`,
+          80,
+        );
         const { data: conversation, error: conversationError } = await supabaseAdmin
           .from("conversations")
           .select("user_a, user_b")
@@ -484,7 +495,7 @@ export const notifyUser = createServerFn({ method: "POST" })
       recipientsToInsert.map((id) => ({
         user_id: id,
         kind: data.kind,
-        title: data.title,
+        title: notificationTitle,
         body: data.body,
         url: notificationUrl,
       })),
@@ -511,7 +522,7 @@ export const notifyUser = createServerFn({ method: "POST" })
     try {
       const { sendFcmToTokens } = await import("./fcm.server");
       const { sent, staleTokens } = await sendFcmToTokens(tokens, {
-        title: data.title,
+        title: notificationTitle,
         body: data.body,
         url: notificationUrl,
         kind: data.kind,
