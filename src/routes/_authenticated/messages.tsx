@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Reply, Send, X } from "lucide-react";
@@ -48,6 +48,8 @@ interface MessageRow {
   read_at: string | null;
   created_at: string;
 }
+
+const MESSAGE_PAGE_SIZE = 50;
 
 interface PostRef {
   id: string;
@@ -234,6 +236,8 @@ function ChatPane({
 }) {
   const { user, limits } = useCampus();
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [draft, setDraft] = useState("");
   const [otherTyping, setOtherTyping] = useState(false);
   const [replyTo, setReplyTo] = useState<MessageRow | null>(null);
@@ -241,35 +245,173 @@ function ChatPane({
   const [linkedPosts, setLinkedPosts] = useState<Record<string, PostRef>>({});
   const [sending, setSending] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
+  const loadGeneration = useRef(0);
+  const olderLoadGeneration = useRef(0);
+  const activeMessageLoad = useRef<number | null>(null);
+  const pendingMessageChanges = useRef(new Map<string, Partial<MessageRow> | null>());
+  const messageList = useRef<HTMLDivElement>(null);
+  const scrollAnchor = useRef<{ height: number; top: number } | null>(null);
+  const currentUserId = user?.id;
   const otherId = useMemo(
     () => (conversation.user_a === user?.id ? conversation.user_b : conversation.user_a),
     [conversation, user?.id],
   );
 
+  const markConversationRead = useCallback(() => {
+    if (!currentUserId) return;
+    void supabase
+      .from("messages")
+      .update({ read_at: new Date().toISOString() })
+      .eq("conversation_id", conversation.id)
+      .neq("sender_id", currentUserId)
+      .is("read_at", null);
+  }, [conversation.id, currentUserId]);
+
   const load = useCallback(async () => {
+    olderLoadGeneration.current += 1;
+    setLoadingOlderMessages(false);
+    const generation = ++loadGeneration.current;
+    activeMessageLoad.current = generation;
+    pendingMessageChanges.current.clear();
     const { data } = await supabase
       .from("messages")
       .select("id, conversation_id, sender_id, content, reply_to_id, post_id, read_at, created_at")
       .eq("conversation_id", conversation.id)
-      .order("created_at", { ascending: true })
-      .limit(300);
-    const rows = (data ?? []) as MessageRow[];
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(MESSAGE_PAGE_SIZE + 1);
+    if (generation !== loadGeneration.current) return;
+    const page = (data ?? []) as MessageRow[];
+    const rowsById = new Map(
+      page
+        .slice(0, MESSAGE_PAGE_SIZE)
+        .reverse()
+        .map((message) => [message.id, message]),
+    );
+    for (const [id, change] of pendingMessageChanges.current) {
+      if (change === null) {
+        rowsById.delete(id);
+      } else {
+        const existing = rowsById.get(id);
+        if (existing) {
+          rowsById.set(id, { ...existing, ...change });
+        } else if (
+          change.conversation_id &&
+          change.sender_id &&
+          change.content !== undefined &&
+          change.created_at
+        ) {
+          rowsById.set(id, change as MessageRow);
+        }
+      }
+    }
+    pendingMessageChanges.current.clear();
+    activeMessageLoad.current = null;
+    const rows = [...rowsById.values()].sort(
+      (left, right) =>
+        left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id),
+    );
+    setHasOlderMessages(page.length > MESSAGE_PAGE_SIZE || rows.length > MESSAGE_PAGE_SIZE);
     setMessages(rows);
+    markConversationRead();
     const postIds = [
       ...new Set(rows.map((message) => message.post_id).filter(Boolean)),
     ] as string[];
-    if (postIds.length === 0) {
-      setLinkedPosts({});
-      return;
-    }
+    if (postIds.length === 0) return;
     const { data: posts } = await supabase
       .from("posts")
       .select("id, content, image_url")
       .in("id", postIds);
+    if (generation !== loadGeneration.current) return;
     const map: Record<string, PostRef> = {};
     for (const post of (posts ?? []) as PostRef[]) map[post.id] = post;
-    setLinkedPosts(map);
-  }, [conversation.id]);
+    setLinkedPosts((current) => ({ ...current, ...map }));
+  }, [conversation.id, markConversationRead]);
+
+  const loadPostRef = useCallback(async (postId: string) => {
+    const { data } = await supabase
+      .from("posts")
+      .select("id, content, image_url")
+      .eq("id", postId)
+      .maybeSingle();
+    if (data) {
+      setLinkedPosts((current) => ({ ...current, [postId]: data as PostRef }));
+    }
+  }, []);
+
+  const appendMessage = useCallback((message: MessageRow) => {
+    if (activeMessageLoad.current !== null) {
+      pendingMessageChanges.current.set(message.id, message);
+    }
+    setMessages((current) => {
+      if (current.some((item) => item.id === message.id)) {
+        return current.map((item) =>
+          item.id === message.id
+            ? { ...item, ...message, read_at: message.read_at ?? item.read_at }
+            : item,
+        );
+      }
+      return [...current, message].sort(
+        (left, right) =>
+          left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id),
+      );
+    });
+  }, []);
+
+  const loadOlderMessages = async () => {
+    const oldest = messages[0];
+    if (!oldest || loadingOlderMessages || !hasOlderMessages) return;
+    const generation = ++olderLoadGeneration.current;
+    setLoadingOlderMessages(true);
+    const cursor = oldest.created_at;
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, conversation_id, sender_id, content, reply_to_id, post_id, read_at, created_at")
+      .eq("conversation_id", conversation.id)
+      .or(`created_at.lt.${cursor},and(created_at.eq.${cursor},id.lt.${oldest.id})`)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(MESSAGE_PAGE_SIZE + 1);
+    if (generation !== olderLoadGeneration.current) return;
+    setLoadingOlderMessages(false);
+    if (error) {
+      toast.error("Could not load earlier messages");
+      return;
+    }
+
+    const page = (data ?? []) as MessageRow[];
+    setHasOlderMessages(page.length > MESSAGE_PAGE_SIZE);
+    const older = page.slice(0, MESSAGE_PAGE_SIZE).reverse();
+    if (older.length === 0) return;
+    const container = messageList.current;
+    const anchor = container ? { height: container.scrollHeight, top: container.scrollTop } : null;
+    if (container) {
+      scrollAnchor.current = anchor;
+    }
+    setMessages((current) => {
+      const existingIds = new Set(current.map((message) => message.id));
+      return [...older.filter((message) => !existingIds.has(message.id)), ...current];
+    });
+    if (anchor) {
+      window.requestAnimationFrame(() => {
+        if (scrollAnchor.current === anchor) scrollAnchor.current = null;
+      });
+    }
+
+    const postIds = [
+      ...new Set(older.map((message) => message.post_id).filter(Boolean)),
+    ] as string[];
+    if (postIds.length > 0) {
+      const { data: posts } = await supabase
+        .from("posts")
+        .select("id, content, image_url")
+        .in("id", postIds);
+      if (generation !== olderLoadGeneration.current) return;
+      const map: Record<string, PostRef> = {};
+      for (const post of (posts ?? []) as PostRef[]) map[post.id] = post;
+      setLinkedPosts((current) => ({ ...current, ...map }));
+    }
+  };
 
   useEffect(() => {
     if (!postId) {
@@ -297,24 +439,18 @@ function ChatPane({
     };
   }, [postId, onDismissPost]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // Mark the other person's messages as read.
-  useEffect(() => {
-    if (!user) return;
-    void supabase
-      .from("messages")
-      .update({ read_at: new Date().toISOString() })
-      .eq("conversation_id", conversation.id)
-      .neq("sender_id", user.id)
-      .is("read_at", null);
-  }, [conversation.id, user, messages.length]);
+  const latestMessageId = messages[messages.length - 1]?.id;
+  useLayoutEffect(() => {
+    const anchor = scrollAnchor.current;
+    const container = messageList.current;
+    if (!anchor || !container) return;
+    container.scrollTop = anchor.top + (container.scrollHeight - anchor.height);
+    scrollAnchor.current = null;
+  }, [messages.length]);
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, otherTyping]);
+    if (latestMessageId) bottom.current?.scrollIntoView({ behavior: "smooth" });
+  }, [latestMessageId]);
 
   useEffect(() => {
     let activeChannel: ReturnType<typeof supabase.channel> | null = null;
@@ -341,8 +477,9 @@ function ChatPane({
       if (removePending) await removePending;
       if (disposed || isPageHidden() || activeChannel) return;
 
-      activeChannel = supabase
-        .channel(`chat-${conversation.id}`)
+      const channel = supabase.channel(`chat-${conversation.id}`);
+      activeChannel = channel;
+      channel
         .on(
           "postgres_changes",
           {
@@ -351,7 +488,45 @@ function ChatPane({
             table: "messages",
             filter: `conversation_id=eq.${conversation.id}`,
           },
-          () => void load(),
+          (payload) => {
+            if (payload.eventType === "INSERT") {
+              const row = payload.new as MessageRow;
+              if (row.id && row.conversation_id === conversation.id && row.created_at) {
+                appendMessage(row);
+                if (row.sender_id !== user?.id) markConversationRead();
+                if (row.post_id) void loadPostRef(row.post_id);
+                return;
+              }
+            }
+
+            if (payload.eventType === "UPDATE") {
+              const row = payload.new as Partial<MessageRow>;
+              if (row.id) {
+                if (activeMessageLoad.current !== null) {
+                  pendingMessageChanges.current.set(row.id, row);
+                }
+                setMessages((current) =>
+                  current.map((message) =>
+                    message.id === row.id ? { ...message, ...row } : message,
+                  ),
+                );
+                return;
+              }
+            }
+
+            if (payload.eventType === "DELETE") {
+              const row = payload.old as Partial<MessageRow>;
+              if (row.id) {
+                if (activeMessageLoad.current !== null) {
+                  pendingMessageChanges.current.set(row.id, null);
+                }
+                setMessages((current) => current.filter((message) => message.id !== row.id));
+                return;
+              }
+            }
+
+            void load();
+          },
         )
         .on(
           "postgres_changes",
@@ -368,7 +543,12 @@ function ChatPane({
             window.setTimeout(() => setOtherTyping(false), 3000);
           },
         )
-        .subscribe();
+        .subscribe((status) => {
+          if (disposed || activeChannel !== channel) return;
+          if (status === "SUBSCRIBED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            void load();
+          }
+        });
     };
 
     const handleVisibilityChange = () => {
@@ -376,7 +556,6 @@ function ChatPane({
         removeActiveChannel();
       } else if (!activeChannel) {
         void subscribeToActiveChat();
-        void load();
       }
     };
 
@@ -387,7 +566,7 @@ function ChatPane({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       removeActiveChannel();
     };
-  }, [conversation.id, user?.id, load]);
+  }, [conversation.id, user?.id, load, loadPostRef, appendMessage, markConversationRead]);
 
   const lastTyped = useRef(0);
   const onType = (value: string) => {
@@ -420,7 +599,7 @@ function ChatPane({
         reply_to_id: replyTo?.id ?? null,
         post_id: postDraft?.id ?? null,
       })
-      .select("id")
+      .select("id, conversation_id, sender_id, content, reply_to_id, post_id, read_at, created_at")
       .single();
     if (error || !insertedMessage) {
       setSending(false);
@@ -438,6 +617,9 @@ function ChatPane({
       onDismissPost();
     }
     setSending(false);
+    const sentMessage = insertedMessage as MessageRow;
+    appendMessage(sentMessage);
+    if (sentMessage.post_id) void loadPostRef(sentMessage.post_id);
     void notify({
       recipientIds: otherId,
       title: "New message",
@@ -446,7 +628,6 @@ function ChatPane({
       kind: "message",
       eventId: insertedMessage.id,
     });
-    await load();
   };
 
   return (
@@ -478,7 +659,24 @@ function ChatPane({
         </div>
       </header>
 
-      <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
+      <div ref={messageList} className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
+        {hasOlderMessages && (
+          <div className="flex justify-center pb-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-10"
+              disabled={loadingOlderMessages}
+              onClick={() => void loadOlderMessages()}
+            >
+              {loadingOlderMessages ? (
+                <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {loadingOlderMessages ? "Loading earlier messages…" : "Load earlier messages"}
+            </Button>
+          </div>
+        )}
         {messages.map((m) => {
           const mine = m.sender_id === user?.id;
           const quoted = m.reply_to_id ? messages.find((x) => x.id === m.reply_to_id) : null;

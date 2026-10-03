@@ -66,6 +66,8 @@ function ConnectPage() {
   const [hasMoreCandidates, setHasMoreCandidates] = useState(true);
   const [swipesToday, setSwipesToday] = useState(0);
   const [superToday, setSuperToday] = useState(0);
+  const [loadingMatches, setLoadingMatches] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [matches, setMatches] = useState<MatchRow[]>([]);
   const [matchProfiles, setMatchProfiles] = useState<Record<string, MiniProfile>>({});
   const [swipeHistory, setSwipeHistory] = useState<SwipeRow[]>([]);
@@ -78,6 +80,8 @@ function ConnectPage() {
   const candidateOffset = useRef(0);
   const seenProfileIds = useRef(new Set<string>());
   const queuedProfileIds = useRef(new Set<string>());
+  const matchesRequestGeneration = useRef(0);
+  const historyRequestGeneration = useRef(0);
 
   const loadDeck = useCallback(async () => {
     if (!user) return;
@@ -170,52 +174,91 @@ function ConnectPage() {
 
   const loadMatches = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("matches")
-      .select("id, user_a, user_b, created_at")
-      .eq("is_active", true)
-      .order("created_at", { ascending: false });
-    const rows = (data ?? []) as MatchRow[];
-    setMatches(rows);
-    const others = rows.map((match) => (match.user_a === user.id ? match.user_b : match.user_a));
-    setMatchProfiles(await fetchProfiles(others));
+    const generation = ++matchesRequestGeneration.current;
+    setLoadingMatches(true);
+    try {
+      const { data, error } = await supabase
+        .from("matches")
+        .select("id, user_a, user_b, created_at")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      if (generation !== matchesRequestGeneration.current) return;
+      const rows = (data ?? []) as MatchRow[];
+      setMatches(rows);
+      const others = rows.map((match) => (match.user_a === user.id ? match.user_b : match.user_a));
+      const profiles = await fetchProfiles(others);
+      if (generation === matchesRequestGeneration.current) setMatchProfiles(profiles);
+    } catch (error) {
+      if (generation === matchesRequestGeneration.current) {
+        toast.error(error instanceof Error ? error.message : "Could not load matches");
+      }
+    } finally {
+      if (generation === matchesRequestGeneration.current) setLoadingMatches(false);
+    }
   }, [user]);
 
   const loadHistory = useCallback(async () => {
     if (!user) return;
-    const { data, error } = await supabase
-      .from("swipes")
-      .select("swipee_id, action, created_at")
-      .eq("swiper_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (error) {
-      toast.error(error.message);
-      return;
+    const generation = ++historyRequestGeneration.current;
+    setLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from("swipes")
+        .select("swipee_id, action, created_at")
+        .eq("swiper_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      if (generation !== historyRequestGeneration.current) return;
+      const rows = (data ?? []) as SwipeRow[];
+      setSwipeHistory(rows);
+      const profiles = await fetchProfiles(rows.map((row) => row.swipee_id));
+      if (generation === historyRequestGeneration.current) setHistoryProfiles(profiles);
+    } catch (error) {
+      if (generation === historyRequestGeneration.current) {
+        toast.error(error instanceof Error ? error.message : "Could not load swipe history");
+      }
+    } finally {
+      if (generation === historyRequestGeneration.current) setLoadingHistory(false);
     }
-    const rows = (data ?? []) as SwipeRow[];
-    setSwipeHistory(rows);
-    setHistoryProfiles(await fetchProfiles(rows.map((row) => row.swipee_id)));
   }, [user]);
 
   useEffect(() => {
     void loadDeck();
-    void loadMatches();
-    void loadHistory();
-  }, [loadDeck, loadMatches, loadHistory]);
+  }, [loadDeck]);
 
   useEffect(() => {
-    if (!user) return;
-    const channel = supabase
-      .channel(`match-live-${user.id}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "matches" }, () => {
-        void loadMatches();
-      })
-      .subscribe();
+    if (tab !== "history") return;
+    void loadHistory();
     return () => {
-      void supabase.removeChannel(channel);
+      historyRequestGeneration.current += 1;
     };
-  }, [user, loadMatches]);
+  }, [tab, loadHistory]);
+
+  useEffect(() => {
+    if (!user?.id || tab !== "matches") return;
+    void loadMatches();
+    let refreshTimer: number | null = null;
+    const scheduleRefresh = () => {
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        void loadMatches();
+      }, 300);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") scheduleRefresh();
+    };
+    window.addEventListener("focus", scheduleRefresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      window.removeEventListener("focus", scheduleRefresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      matchesRequestGeneration.current += 1;
+    };
+  }, [user?.id, loadMatches, tab]);
 
   const current = deck[0];
   const compatibility = current
@@ -271,11 +314,12 @@ function ConnectPage() {
         });
       }
     }
-    await Promise.all([loadMatches(), loadHistory()]);
   };
 
   const changeVote = async (row: SwipeRow, action: ChangeableSwipeAction) => {
     if (!user || updatingSwipe) return;
+    historyRequestGeneration.current += 1;
+    setLoadingHistory(false);
     setUpdatingSwipe(row.swipee_id);
     const { error } = await supabase
       .from("swipes")
@@ -312,7 +356,6 @@ function ConnectPage() {
         });
       }
     }
-    await Promise.all([loadDeck(), loadMatches(), loadHistory()]);
   };
 
   const openChat = async (otherId: string) => {
@@ -553,7 +596,9 @@ function ConnectPage() {
 
         <TabsContent value="matches" className="mt-5">
           <section>
-            {matches.length === 0 ? (
+            {loadingMatches && matches.length === 0 ? (
+              <Loader2 className="mx-auto my-12 size-6 animate-spin text-muted-foreground" />
+            ) : matches.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
                 No matches yet — keep swiping.
               </p>
@@ -598,7 +643,9 @@ function ConnectPage() {
 
         <TabsContent value="history" className="mt-5">
           <section>
-            {swipeHistory.length === 0 ? (
+            {loadingHistory && swipeHistory.length === 0 ? (
+              <Loader2 className="mx-auto my-12 size-6 animate-spin text-muted-foreground" />
+            ) : swipeHistory.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
                 Profiles you pass or like will appear here.
               </p>
