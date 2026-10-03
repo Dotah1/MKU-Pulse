@@ -239,7 +239,7 @@ function SignupForm() {
       email: cleanEmail,
       password,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: "https://mku-pulse.vercel.app",
         data: {
           full_name: sanitizeText(fullName, 80),
           phone: phone.trim(),
