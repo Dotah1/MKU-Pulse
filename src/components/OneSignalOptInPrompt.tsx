@@ -27,7 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const ACTIVE_DELAY_MS = 60_000;
+const ACTIVE_DELAY_MS = 20_000;
 
 type PromptTargets = { app: boolean; oneSignal: boolean };
 const NO_TARGETS: PromptTargets = { app: false, oneSignal: false };

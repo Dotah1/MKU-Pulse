@@ -49,6 +49,7 @@ type SwipeAction = "like" | "pass" | "super_like";
 type ChangeableSwipeAction = "like" | "pass";
 type ConnectTab = "discover" | "matches" | "history";
 const CANDIDATE_PAGE_SIZE = 20;
+const SWIPE_EXIT_FALLBACK_MS = 520;
 
 interface SwipeRow {
   swipee_id: string;
@@ -75,8 +76,11 @@ function ConnectPage() {
   const [updatingSwipe, setUpdatingSwipe] = useState<string | null>(null);
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [exitAction, setExitAction] = useState<SwipeAction | null>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const suppressClick = useRef(false);
+  const pendingSwipe = useRef<{ action: SwipeAction; person: MiniProfile } | null>(null);
+  const exitTimer = useRef<number | null>(null);
   const candidateOffset = useRef(0);
   const seenProfileIds = useRef(new Set<string>());
   const queuedProfileIds = useRef(new Set<string>());
@@ -271,31 +275,32 @@ function ConnectPage() {
     : null;
   const outOfSwipes = swipesToday >= limits.swipesPerDay;
 
-  const swipe = async (action: SwipeAction) => {
-    if (!user || !current) return;
+  const commitSwipe = async (action: SwipeAction, person: MiniProfile) => {
+    if (!user) return;
     if (outOfSwipes) {
+      setDeck((items) => [person, ...items.filter((item) => item.id !== person.id)]);
       toast.error(`Daily swipe limit reached on the ${limits.label} plan`);
       return;
     }
     if (action === "super_like" && superToday >= limits.superLikesPerDay) {
+      setDeck((items) => [person, ...items.filter((item) => item.id !== person.id)]);
       toast.error("No super likes left today");
       return;
     }
-    setDeck((items) => items.slice(1));
     const { error } = await supabase
       .from("swipes")
-      .insert({ swiper_id: user.id, swipee_id: current.id, action });
+      .insert({ swiper_id: user.id, swipee_id: person.id, action });
     if (error) {
-      setDeck((items) => [current, ...items.filter((item) => item.id !== current.id)]);
+      setDeck((items) => [person, ...items.filter((item) => item.id !== person.id)]);
       toast.error(error.message);
       return;
     }
-    seenProfileIds.current.add(current.id);
+    seenProfileIds.current.add(person.id);
     setSwipesToday((count) => count + 1);
     if (action === "super_like") setSuperToday((count) => count + 1);
     if (action !== "pass") {
       // The database creates the match on a mutual like — tell them if it happened.
-      const [a, b] = user.id < current.id ? [user.id, current.id] : [current.id, user.id];
+      const [a, b] = user.id < person.id ? [user.id, person.id] : [person.id, user.id];
       const { data: match } = await supabase
         .from("matches")
         .select("id")
@@ -305,7 +310,7 @@ function ConnectPage() {
         .maybeSingle();
       if (match) {
         void notify({
-          recipientIds: current.id,
+          recipientIds: person.id,
           title: "It's a match!",
           body: "You matched with someone on MKU Pulse.",
           url: "/connect",
@@ -314,6 +319,40 @@ function ConnectPage() {
         });
       }
     }
+  };
+
+  const finishSwipeAnimation = () => {
+    const pending = pendingSwipe.current;
+    if (!pending) return;
+    pendingSwipe.current = null;
+    if (exitTimer.current !== null) {
+      window.clearTimeout(exitTimer.current);
+      exitTimer.current = null;
+    }
+    setExitAction(null);
+    setDragX(0);
+    setDeck((items) => items.filter((person) => person.id !== pending.person.id));
+    void commitSwipe(pending.action, pending.person);
+  };
+
+  const beginSwipeAnimation = (action: SwipeAction, direction: -1 | 1) => {
+    if (!user || !current || pendingSwipe.current) return;
+    if (outOfSwipes) {
+      setDragX(0);
+      toast.error(`Daily swipe limit reached on the ${limits.label} plan`);
+      return;
+    }
+    if (action === "super_like" && superToday >= limits.superLikesPerDay) {
+      setDragX(0);
+      toast.error("No super likes left today");
+      return;
+    }
+
+    pendingSwipe.current = { action, person: current };
+    setExitAction(action);
+    setDragging(false);
+    setDragX(direction * (window.innerWidth + 240));
+    exitTimer.current = window.setTimeout(finishSwipeAnimation, SWIPE_EXIT_FALLBACK_MS);
   };
 
   const changeVote = async (row: SwipeRow, action: ChangeableSwipeAction) => {
@@ -382,7 +421,12 @@ function ConnectPage() {
   };
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+    if (
+      pendingSwipe.current ||
+      event.button !== 0 ||
+      (event.target as HTMLElement).closest("button")
+    )
+      return;
     dragStart.current = { x: event.clientX, y: event.clientY };
     setDragging(true);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -390,7 +434,7 @@ function ConnectPage() {
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const start = dragStart.current;
-    if (!start) return;
+    if (!start || pendingSwipe.current) return;
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
     if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 16) return;
@@ -399,18 +443,19 @@ function ConnectPage() {
 
   const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     const start = dragStart.current;
-    if (!start) return;
+    if (!start || pendingSwipe.current) return;
     const dx = event.clientX - start.x;
     dragStart.current = null;
     setDragging(false);
     if (Math.abs(dx) >= 100) {
       suppressClick.current = true;
-      void swipe(dx > 0 ? "like" : "pass");
+      beginSwipeAnimation(dx > 0 ? "like" : "pass", dx > 0 ? 1 : -1);
       window.setTimeout(() => {
         suppressClick.current = false;
       }, 500);
+    } else {
+      setDragX(0);
     }
-    setDragX(0);
   };
 
   const outOfSuperLikes = superToday >= limits.superLikesPerDay;
@@ -442,7 +487,7 @@ function ConnectPage() {
         </TabsList>
 
         <TabsContent value="discover" className="mt-5">
-          <section>
+          <section className="overflow-x-clip">
             <div className="flex justify-center">
               {loading ? (
                 <Loader2 className="my-16 size-6 animate-spin text-muted-foreground" />
@@ -472,17 +517,31 @@ function ConnectPage() {
                 <div
                   className="relative w-full max-w-sm touch-pan-y select-none overflow-hidden rounded-3xl border border-border bg-card shadow-sm"
                   style={{
-                    transform: `translateX(${dragX}px) rotate(${Math.max(-14, Math.min(14, dragX / 18))}deg)`,
-                    transition: dragging ? "none" : "transform 180ms ease-out",
+                    transform: `translate3d(${dragX}px, 0, 0) rotate(${Math.max(-22, Math.min(22, dragX / 16))}deg)`,
+                    transition: dragging
+                      ? "none"
+                      : exitAction
+                        ? "transform 420ms cubic-bezier(0.18, 0.72, 0.24, 1)"
+                        : "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
                     touchAction: "pan-y",
+                    pointerEvents: exitAction ? "none" : "auto",
                   }}
                   onPointerDown={onPointerDown}
                   onPointerMove={onPointerMove}
                   onPointerUp={onPointerUp}
                   onPointerCancel={() => {
+                    if (pendingSwipe.current) return;
                     dragStart.current = null;
                     setDragging(false);
                     setDragX(0);
+                  }}
+                  onTransitionEnd={(event) => {
+                    if (
+                      event.target === event.currentTarget &&
+                      event.propertyName === "transform"
+                    ) {
+                      finishSwipeAnimation();
+                    }
                   }}
                   onClickCapture={(event) => {
                     if (suppressClick.current) {
@@ -492,18 +551,26 @@ function ConnectPage() {
                     }
                   }}
                 >
-                  {dragX > 12 && (
+                  {(dragX > 12 || exitAction === "like" || exitAction === "super_like") && (
                     <span
                       className="pointer-events-none absolute left-5 top-5 z-10 rotate-[-12deg] rounded-lg border-2 border-emerald-500 bg-emerald-500/90 px-3 py-1 text-lg font-black tracking-widest text-white shadow-lg"
-                      style={{ opacity: Math.min(1, dragX / 90) }}
+                      style={{
+                        opacity: exitAction ? 1 : Math.min(1, dragX / 90),
+                        transform: `scale(${exitAction ? 1.08 : Math.min(1.08, 0.88 + dragX / 450)})`,
+                        transition: "opacity 120ms ease-out, transform 120ms ease-out",
+                      }}
                     >
-                      LIKE
+                      {exitAction === "super_like" ? "SUPER LIKE" : "LIKE"}
                     </span>
                   )}
-                  {dragX < -12 && (
+                  {(dragX < -12 || exitAction === "pass") && (
                     <span
                       className="pointer-events-none absolute right-5 top-5 z-10 rotate-[12deg] rounded-lg border-2 border-red-500 bg-red-500/90 px-3 py-1 text-lg font-black tracking-widest text-white shadow-lg"
-                      style={{ opacity: Math.min(1, Math.abs(dragX) / 90) }}
+                      style={{
+                        opacity: exitAction ? 1 : Math.min(1, Math.abs(dragX) / 90),
+                        transform: `scale(${exitAction ? 1.08 : Math.min(1.08, 0.88 + Math.abs(dragX) / 450)})`,
+                        transition: "opacity 120ms ease-out, transform 120ms ease-out",
+                      }}
                     >
                       PASS
                     </span>
@@ -570,7 +637,7 @@ function ConnectPage() {
                         size="lg"
                         className="size-14 rounded-full p-0"
                         aria-label="Pass"
-                        onClick={() => void swipe("pass")}
+                        onClick={() => beginSwipeAnimation("pass", -1)}
                       >
                         <X className="size-6" aria-hidden="true" />
                       </Button>
@@ -580,7 +647,7 @@ function ConnectPage() {
                           size="lg"
                           className="size-14 rounded-full border-accent p-0 text-accent"
                           aria-label="Super like"
-                          onClick={() => void swipe("super_like")}
+                          onClick={() => beginSwipeAnimation("super_like", 1)}
                           disabled={outOfSuperLikes}
                         >
                           <Star className="size-6" aria-hidden="true" />
@@ -590,7 +657,7 @@ function ConnectPage() {
                         size="lg"
                         className="size-16 rounded-full p-0"
                         aria-label="Like"
-                        onClick={() => void swipe("like")}
+                        onClick={() => beginSwipeAnimation("like", 1)}
                       >
                         <Heart className="size-7" aria-hidden="true" />
                       </Button>
