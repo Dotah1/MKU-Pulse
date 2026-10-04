@@ -1,16 +1,18 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Bell } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { NotificationItemLink } from "@/components/NotificationItemLink";
 import { timeAgo } from "@/lib/campus";
-import type { RouteTo } from "@/lib/links";
 
 export function NotificationBell() {
   const { items, unreadCount, markRead, markAllRead } = useNotifications(15);
+  const [open, setOpen] = useState(false);
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -40,23 +42,30 @@ export function NotificationBell() {
               Nothing yet — you're all caught up.
             </li>
           )}
-          {items.map((n) => (
-            <li key={n.id} className={n.read_at ? "" : "bg-primary/5"}>
-              <Link
-                to={(n.url ?? "/notifications") as RouteTo}
-                onClick={() => void markRead(n.id)}
+          {items.map((notification) => (
+            <li key={notification.id} className={notification.read_at ? "" : "bg-primary/5"}>
+              <NotificationItemLink
+                notification={notification}
+                markRead={markRead}
+                onNavigate={() => setOpen(false)}
                 className="block px-3 py-3 hover:bg-secondary"
               >
-                <p className="text-sm font-medium">{n.title}</p>
-                {n.body && <p className="text-xs text-muted-foreground">{n.body}</p>}
-                <p className="mt-1 text-[11px] text-muted-foreground">{timeAgo(n.created_at)}</p>
-              </Link>
+                <p className="text-sm font-medium">{notification.title}</p>
+                {notification.body && (
+                  <p className="text-xs text-muted-foreground">{notification.body}</p>
+                )}
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {timeAgo(notification.created_at)}
+                </p>
+              </NotificationItemLink>
             </li>
           ))}
         </ul>
         <div className="border-t border-border p-2">
           <Button asChild variant="ghost" size="sm" className="w-full">
-            <Link to="/notifications">See all notifications</Link>
+            <Link to="/notifications" onClick={() => setOpen(false)}>
+              See all notifications
+            </Link>
           </Button>
         </div>
       </PopoverContent>

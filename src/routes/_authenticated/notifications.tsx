@@ -1,9 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { BellOff, Loader2 } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Button } from "@/components/ui/button";
+import { NotificationItemLink } from "@/components/NotificationItemLink";
 import { timeAgo } from "@/lib/campus";
-import type { RouteTo } from "@/lib/links";
 
 export const Route = createFileRoute("/_authenticated/notifications")({
   head: () => ({
@@ -21,7 +21,8 @@ export const Route = createFileRoute("/_authenticated/notifications")({
 });
 
 function NotificationsPage() {
-  const { items, loading, unreadCount, markRead, markAllRead } = useNotifications(100);
+  const { items, loading, error, unreadCount, markRead, markAllRead, reload } =
+    useNotifications(100);
 
   return (
     <div className="space-y-4">
@@ -43,6 +44,13 @@ function NotificationsPage() {
         <div className="flex justify-center py-16">
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
         </div>
+      ) : error ? (
+        <div role="alert" className="rounded-2xl border border-border bg-card p-8 text-center">
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button variant="outline" className="mt-4 min-h-11" onClick={() => void reload()}>
+            Try again
+          </Button>
+        </div>
       ) : items.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-10 text-center">
           <BellOff className="mx-auto size-8 text-muted-foreground" aria-hidden="true" />
@@ -53,24 +61,26 @@ function NotificationsPage() {
         </div>
       ) : (
         <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-          {items.map((n) => (
-            <li key={n.id} className={n.read_at ? "" : "bg-primary/5"}>
-              <Link
-                to={(n.url ?? "/notifications") as RouteTo}
-                onClick={() => void markRead(n.id)}
+          {items.map((notification) => (
+            <li key={notification.id} className={notification.read_at ? "" : "bg-primary/5"}>
+              <NotificationItemLink
+                notification={notification}
+                markRead={markRead}
                 className="block px-4 py-4 hover:bg-secondary"
               >
                 <div className="flex items-center gap-2">
-                  <p className="font-medium">{n.title}</p>
-                  {!n.read_at && (
+                  <p className="font-medium">{notification.title}</p>
+                  {!notification.read_at && (
                     <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
                   )}
                   <span className="ml-auto text-xs text-muted-foreground">
-                    {timeAgo(n.created_at)}
+                    {timeAgo(notification.created_at)}
                   </span>
                 </div>
-                {n.body && <p className="mt-1 text-sm text-muted-foreground">{n.body}</p>}
-              </Link>
+                {notification.body && (
+                  <p className="mt-1 text-sm text-muted-foreground">{notification.body}</p>
+                )}
+              </NotificationItemLink>
             </li>
           ))}
         </ul>

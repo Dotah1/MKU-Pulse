@@ -235,7 +235,15 @@ export function PostCard({
     if (!user || mine) return;
     try {
       const id = await getOrCreateConversation(user.id, post.user_id);
-      void navigate({ to: "/messages", search: { c: id, p: post.id } });
+      void navigate({
+        to: "/messages",
+        search: {
+          c: id,
+          p: post.id,
+          notification_event: undefined,
+          notification_kind: undefined,
+        },
+      });
     } catch {
       toast.error("Could not open that chat");
     }

@@ -90,7 +90,15 @@ function MentorshipPage() {
     if (!user) return;
     try {
       const id = await getOrCreateConversation(user.id, mentorId);
-      void navigate({ to: "/messages", search: { c: id, p: undefined } });
+      void navigate({
+        to: "/messages",
+        search: {
+          c: id,
+          p: undefined,
+          notification_event: undefined,
+          notification_kind: undefined,
+        },
+      });
     } catch {
       toast.error("Could not open that chat");
     }
@@ -395,7 +403,15 @@ function IncomingRequests() {
           eventId: row.id,
         });
       }
-      void navigate({ to: "/messages", search: { c: id, p: undefined } });
+      void navigate({
+        to: "/messages",
+        search: {
+          c: id,
+          p: undefined,
+          notification_event: undefined,
+          notification_kind: undefined,
+        },
+      });
     } catch {
       toast.error("Could not open that chat");
     }

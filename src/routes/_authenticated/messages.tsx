@@ -15,6 +15,13 @@ export const Route = createFileRoute("/_authenticated/messages")({
   validateSearch: (search: Record<string, unknown>) => ({
     c: typeof search["c"] === "string" ? (search["c"] as string) : undefined,
     p: typeof search["p"] === "string" ? (search["p"] as string) : undefined,
+    notification_event:
+      typeof search["notification_event"] === "string" &&
+      /^[0-9a-f-]{36}$/i.test(search["notification_event"])
+        ? search["notification_event"]
+        : undefined,
+    notification_kind:
+      typeof search["notification_kind"] === "string" ? search["notification_kind"] : undefined,
   }),
   head: () => ({
     meta: [
@@ -94,7 +101,12 @@ function PostRefCard({
 
 function MessagesPage() {
   const { user } = useCampus();
-  const { c, p } = Route.useSearch();
+  const {
+    c,
+    p,
+    notification_event: notificationEvent,
+    notification_kind: notificationKind,
+  } = Route.useSearch();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [people, setPeople] = useState<Record<string, MiniProfile>>({});
@@ -140,7 +152,16 @@ function MessagesPage() {
       }
       try {
         const conversationId = await getOrCreateConversation(user.id, data.user_id);
-        if (active) void navigate({ to: "/messages", search: { c: conversationId, p } });
+        if (active)
+          void navigate({
+            to: "/messages",
+            search: {
+              c: conversationId,
+              p,
+              notification_event: undefined,
+              notification_kind: undefined,
+            },
+          });
       } catch {
         toast.error("Could not open a conversation about that post");
       }
@@ -151,8 +172,20 @@ function MessagesPage() {
   }, [user, p, c, navigate]);
 
   const active = conversations.find((x) => x.id === c);
+  const focusMessageId =
+    notificationEvent && (!notificationKind || notificationKind === "message")
+      ? notificationEvent
+      : undefined;
   const dismissPost = useCallback(() => {
-    void navigate({ to: "/messages", search: { c: active?.id ?? c, p: undefined } });
+    void navigate({
+      to: "/messages",
+      search: {
+        c: active?.id ?? c,
+        p: undefined,
+        notification_event: undefined,
+        notification_kind: undefined,
+      },
+    });
   }, [navigate, active?.id, c]);
 
   if (c && active) {
@@ -162,8 +195,19 @@ function MessagesPage() {
         conversation={active}
         other={people[otherId]}
         postId={p}
+        focusMessageId={focusMessageId}
         onDismissPost={dismissPost}
-        onBack={() => void navigate({ to: "/messages", search: { c: undefined, p: undefined } })}
+        onBack={() =>
+          void navigate({
+            to: "/messages",
+            search: {
+              c: undefined,
+              p: undefined,
+              notification_event: undefined,
+              notification_kind: undefined,
+            },
+          })
+        }
       />
     );
   }
@@ -198,7 +242,15 @@ function MessagesPage() {
                 </Link>
                 <button
                   onClick={() =>
-                    void navigate({ to: "/messages", search: { c: conv.id, p: undefined } })
+                    void navigate({
+                      to: "/messages",
+                      search: {
+                        c: conv.id,
+                        p: undefined,
+                        notification_event: undefined,
+                        notification_kind: undefined,
+                      },
+                    })
                   }
                   className="flex flex-1 items-center gap-3 py-3 text-left"
                 >
@@ -225,12 +277,14 @@ function ChatPane({
   conversation,
   other,
   postId,
+  focusMessageId,
   onDismissPost,
   onBack,
 }: {
   conversation: ConversationRow;
   other: MiniProfile | undefined;
   postId: string | undefined;
+  focusMessageId: string | undefined;
   onDismissPost: () => void;
   onBack: () => void;
 }) {
@@ -244,7 +298,11 @@ function ChatPane({
   const [postDraft, setPostDraft] = useState<PostRef | null>(null);
   const [linkedPosts, setLinkedPosts] = useState<Record<string, PostRef>>({});
   const [sending, setSending] = useState(false);
+  const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const messageElements = useRef(new Map<string, HTMLDivElement>());
+  const focusedMessage = useRef<MessageRow | null>(null);
   const loadGeneration = useRef(0);
   const olderLoadGeneration = useRef(0);
   const activeMessageLoad = useRef<number | null>(null);
@@ -288,6 +346,10 @@ function ChatPane({
         .reverse()
         .map((message) => [message.id, message]),
     );
+    const pinnedMessage = focusedMessage.current;
+    if (pinnedMessage?.conversation_id === conversation.id) {
+      rowsById.set(pinnedMessage.id, pinnedMessage);
+    }
     for (const [id, change] of pendingMessageChanges.current) {
       if (change === null) {
         rowsById.delete(id);
@@ -311,8 +373,9 @@ function ChatPane({
       (left, right) =>
         left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id),
     );
-    setHasOlderMessages(page.length > MESSAGE_PAGE_SIZE || rows.length > MESSAGE_PAGE_SIZE);
+    setHasOlderMessages(page.length > MESSAGE_PAGE_SIZE);
     setMessages(rows);
+    setLoadedConversationId(conversation.id);
     markConversationRead();
     const postIds = [
       ...new Set(rows.map((message) => message.post_id).filter(Boolean)),
@@ -338,6 +401,45 @@ function ChatPane({
       setLinkedPosts((current) => ({ ...current, [postId]: data as PostRef }));
     }
   }, []);
+
+  useEffect(() => {
+    focusedMessage.current = null;
+    setHighlightedMessageId(null);
+    if (!focusMessageId) return;
+
+    let active = true;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select(
+          "id, conversation_id, sender_id, content, reply_to_id, post_id, read_at, created_at",
+        )
+        .eq("id", focusMessageId)
+        .eq("conversation_id", conversation.id)
+        .maybeSingle();
+      if (!active) return;
+      if (error || !data) {
+        toast.error("That message is no longer available");
+        return;
+      }
+
+      const message = data as MessageRow;
+      focusedMessage.current = message;
+      setMessages((current) => {
+        if (current.some((item) => item.id === message.id)) return current;
+        return [...current, message].sort(
+          (left, right) =>
+            left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id),
+        );
+      });
+      setHighlightedMessageId(message.id);
+      if (message.post_id) void loadPostRef(message.post_id);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [focusMessageId, conversation.id, loadPostRef]);
 
   const appendMessage = useCallback((message: MessageRow) => {
     if (activeMessageLoad.current !== null) {
@@ -451,6 +553,19 @@ function ChatPane({
   useEffect(() => {
     if (latestMessageId) bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [latestMessageId]);
+
+  useEffect(() => {
+    if (!highlightedMessageId || loadedConversationId !== conversation.id) return;
+    messageElements.current
+      .get(highlightedMessageId)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightedMessageId, loadedConversationId, conversation.id]);
+
+  useEffect(() => {
+    if (!highlightedMessageId) return;
+    const timeout = window.setTimeout(() => setHighlightedMessageId(null), 4500);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedMessageId]);
 
   useEffect(() => {
     let activeChannel: ReturnType<typeof supabase.channel> | null = null;
@@ -684,6 +799,10 @@ function ChatPane({
           return (
             <div
               key={m.id}
+              ref={(element) => {
+                if (element) messageElements.current.set(m.id, element);
+                else messageElements.current.delete(m.id);
+              }}
               className={`group flex items-center gap-1 ${mine ? "justify-end" : "justify-start"}`}
             >
               {mine && (
@@ -701,7 +820,7 @@ function ChatPane({
                   mine
                     ? "bg-primary text-primary-foreground"
                     : "bg-secondary text-secondary-foreground"
-                }`}
+                } ${highlightedMessageId === m.id ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
               >
                 {quoted && (
                   <p

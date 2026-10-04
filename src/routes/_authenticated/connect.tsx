@@ -367,7 +367,15 @@ function ConnectPage() {
     }
     try {
       const id = await getOrCreateConversation(user.id, otherId);
-      void navigate({ to: "/messages", search: { c: id, p: undefined } });
+      void navigate({
+        to: "/messages",
+        search: {
+          c: id,
+          p: undefined,
+          notification_event: undefined,
+          notification_kind: undefined,
+        },
+      });
     } catch {
       toast.error("Could not open that chat");
     }

@@ -102,10 +102,11 @@ const notificationKinds = new Set([
   "compliment",
 ]);
 
-const withEventKey = (url: string, eventId?: string) => {
+const withEventKey = (url: string, eventId: string | undefined, kind: string) => {
   if (!eventId) return url;
   const target = new URL(url, "https://mku-pulse.invalid");
   target.searchParams.set("notification_event", eventId);
+  target.searchParams.set("notification_kind", kind);
   return `${target.pathname}${target.search}${target.hash}`;
 };
 
@@ -459,7 +460,7 @@ export const notifyUser = createServerFn({ method: "POST" })
     // Reuse source event IDs when available; otherwise give this alert one
     // stable key shared by its in-app row, FCM payload, and foreground feedback.
     const notificationEventId = data.eventId ?? crypto.randomUUID();
-    const notificationUrl = withEventKey(data.url, notificationEventId);
+    const notificationUrl = withEventKey(data.url, notificationEventId, data.kind);
     const recipientsToInsert: string[] = [];
     for (const id of recipients) {
       if (data.eventId) {
@@ -567,6 +568,7 @@ export const broadcastAnnouncement = createServerFn({ method: "POST" })
     const announcementUrl = withEventKey(
       createAnnouncementUrl(data.imagePath, expiresAt),
       crypto.randomUUID(),
+      "announcement",
     );
     const recipientIds: string[] = [];
     const pushRecipientIds = new Set<string>();
