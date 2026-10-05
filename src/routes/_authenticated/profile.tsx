@@ -580,10 +580,15 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
               </p>
               <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                 <li>{l.postsPerDay} posts / day</li>
+                <li>Compressed photo posts</li>
+                <li>
+                  {l.canPostVideo
+                    ? `${l.videosPerDay} compressed video${l.videosPerDay === 1 ? "" : "s"} / day (60s max)`
+                    : "No video"}
+                </li>
                 <li>{l.swipesPerDay} swipes / day</li>
-                <li>{l.canPostImage ? "Photo posts" : "Text posts only"}</li>
-                <li>{l.canPostVideo ? "Video posts" : "No video"}</li>
-                <li>{l.canChatMatches ? "Chat with matches" : "Mentorship chat only"}</li>
+                <li>{l.superLikesPerDay > 0 ? `${l.superLikesPerDay} super like${l.superLikesPerDay === 1 ? "" : "s"} / day` : "No super likes"}</li>
+                <li>Chat with matches</li>
               </ul>
             </div>
           );

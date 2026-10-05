@@ -41,6 +41,7 @@ export interface TierLimits {
   postsPerDay: number;
   canPostImage: boolean;
   canPostVideo: boolean;
+  videosPerDay: number;
   swipesPerDay: number;
   superLikesPerDay: number;
   canChatMatches: boolean;
@@ -50,18 +51,20 @@ export const TIER_LIMITS: Record<Tier, TierLimits> = {
   free: {
     label: "Free",
     postsPerDay: 2,
-    canPostImage: false,
+    canPostImage: true,
     canPostVideo: false,
-    swipesPerDay: 10,
+    videosPerDay: 0,
+    swipesPerDay: 25,
     superLikesPerDay: 0,
-    canChatMatches: false,
+    canChatMatches: true,
   },
   mid: {
     label: "Mid",
     postsPerDay: 5,
     canPostImage: true,
-    canPostVideo: false,
-    swipesPerDay: 50,
+    canPostVideo: true,
+    videosPerDay: 1,
+    swipesPerDay: 100,
     superLikesPerDay: 1,
     canChatMatches: true,
   },
@@ -70,8 +73,9 @@ export const TIER_LIMITS: Record<Tier, TierLimits> = {
     postsPerDay: 10,
     canPostImage: true,
     canPostVideo: true,
-    swipesPerDay: 1000,
-    superLikesPerDay: 10,
+    videosPerDay: 5,
+    swipesPerDay: 250,
+    superLikesPerDay: 5,
     canChatMatches: true,
   },
 };
