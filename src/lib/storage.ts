@@ -364,7 +364,7 @@ export async function compressVideoFile(file: File, maxSeconds: number): Promise
     video.pause();
     stream.getTracks().forEach((track) => track.stop());
 
-    const type = mime.split(";")[0];
+    const type = mime.split(";")[0] ?? "video/webm";
     const blob = new Blob(chunks, { type });
     if (!blob.size || blob.size >= file.size) return file;
     const baseName = file.name.replace(/\.[^.]+$/, "") || "video";
