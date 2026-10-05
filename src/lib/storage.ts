@@ -289,3 +289,95 @@ export function videoDuration(file: File): Promise<number> {
     el.src = url;
   });
 }
+
+const VIDEO_MAX_EDGE = 720;
+const VIDEO_BITRATE = 1_200_000;
+
+/**
+ * Re-encode a short video on-device to at most 720p at ~1.2 Mbps using the
+ * browser's MediaRecorder. Falls back to the original file when the browser
+ * cannot record or when the result would not be smaller.
+ */
+export async function compressVideoFile(file: File, maxSeconds: number): Promise<File> {
+  if (typeof MediaRecorder === "undefined" || typeof document === "undefined") return file;
+  const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"].find(
+    (type) => MediaRecorder.isTypeSupported(type),
+  );
+  if (!mime) return file;
+
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.src = url;
+  video.playsInline = true;
+  video.preload = "auto";
+  let audioContext: AudioContext | null = null;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      video.onloadedmetadata = () => resolve();
+      video.onerror = () => reject(new Error("Could not read video"));
+    });
+    const scale = Math.min(1, VIDEO_MAX_EDGE / video.videoWidth, VIDEO_MAX_EDGE / video.videoHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(2, Math.round((video.videoWidth * scale) / 2) * 2);
+    canvas.height = Math.max(2, Math.round((video.videoHeight * scale) / 2) * 2);
+    const ctx = canvas.getContext("2d");
+    if (!ctx || typeof canvas.captureStream !== "function") return file;
+    const stream = canvas.captureStream(30);
+
+    try {
+      audioContext = new AudioContext();
+      const source = audioContext.createMediaElementSource(video);
+      const dest = audioContext.createMediaStreamDestination();
+      source.connect(dest);
+      for (const track of dest.stream.getAudioTracks()) stream.addTrack(track);
+      await audioContext.resume();
+    } catch {
+      video.muted = true;
+    }
+
+    const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: VIDEO_BITRATE });
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (event) => {
+      if (event.data.size) chunks.push(event.data);
+    };
+    const stopped = new Promise<void>((resolve) => (recorder.onstop = () => resolve()));
+
+    let raf = 0;
+    const draw = () => {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      if (video.currentTime >= maxSeconds && recorder.state === "recording") recorder.stop();
+      if (recorder.state === "recording") raf = requestAnimationFrame(draw);
+    };
+    video.onended = () => {
+      if (recorder.state === "recording") recorder.stop();
+    };
+    try {
+      await video.play();
+    } catch {
+      video.muted = true;
+      await video.play();
+    }
+    recorder.start(1000);
+    draw();
+    await stopped;
+    cancelAnimationFrame(raf);
+    video.pause();
+    stream.getTracks().forEach((track) => track.stop());
+
+    const type = mime.split(";")[0];
+    const blob = new Blob(chunks, { type });
+    if (!blob.size || blob.size >= file.size) return file;
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "video";
+    return new File([blob], `${baseName}.${type === "video/mp4" ? "mp4" : "webm"}`, {
+      type,
+      lastModified: file.lastModified,
+    });
+  } catch {
+    return file;
+  } finally {
+    void audioContext?.close().catch(() => {});
+    URL.revokeObjectURL(url);
+    video.removeAttribute("src");
+    video.load();
+  }
+}

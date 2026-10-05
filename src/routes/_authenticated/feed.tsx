@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { CampusToolsDialog } from "@/components/CampusToolsDialog";
 import { POST_MEDIA_MAX_BYTES, POST_VIDEO_MAX_SECONDS, sanitizeText } from "@/lib/campus";
-import { compressImageFile, uploadFile, videoDuration } from "@/lib/storage";
+import { compressImageFile, compressVideoFile, uploadFile, videoDuration } from "@/lib/storage";
 import { checkAndUpdateStreak, checkInServerStreak, countToday } from "@/lib/campus-data";
 
 const FEED_FILTERS = [
@@ -221,9 +221,8 @@ function FeedPage() {
           <h1 className="font-display text-2xl font-bold">Campus feed</h1>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <p className="text-sm text-muted-foreground">
-              {tier === "free"
-                ? `${limits.postsPerDay - usedToday} of ${limits.postsPerDay} text posts left today · upgrade for photos & video`
-                : `${Math.max(0, limits.postsPerDay - usedToday)} posts left today on your ${limits.label} plan`}
+              {`${Math.max(0, limits.postsPerDay - usedToday)} of ${limits.postsPerDay} posts left today on your ${limits.label} plan`}
+              {tier === "free" ? " · upgrade for video" : ` · ${limits.videosPerDay} video${limits.videosPerDay === 1 ? "" : "s"}/day`}
             </p>
             {pulseStreak !== null && (
               <Button
@@ -377,12 +376,26 @@ function Composer({
   const pick = async (f: File | null, want: "image" | "video") => {
     if (!f || preparing) return;
     if (want === "image" && !limits.canPostImage) {
-      toast.error("Photo posts need the Mid or Full plan");
+      toast.error("Photo posts are not available on your plan");
       return;
     }
     if (want === "video" && !limits.canPostVideo) {
-      toast.error("Video posts need the Full plan");
+      toast.error("Video posts need the Mid or Full plan");
       return;
+    }
+    if (want === "video" && user) {
+      const since = new Date();
+      since.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from("posts")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .not("video_url", "is", null)
+        .gte("created_at", since.toISOString());
+      if ((count ?? 0) >= limits.videosPerDay) {
+        toast.error(`You've used your ${limits.videosPerDay} video post${limits.videosPerDay === 1 ? "" : "s"} for today on the ${limits.label} plan`);
+        return;
+      }
     }
     setPreparing(true);
     setPreparingKind(want);
@@ -405,6 +418,7 @@ function Composer({
           throw new Error(`Videos must be ${POST_VIDEO_MAX_SECONDS} seconds or shorter`);
         }
         seconds = Math.ceil(duration);
+        preparedFile = await compressVideoFile(f, POST_VIDEO_MAX_SECONDS);
       }
       setFile(preparedFile);
       setKind(want);
@@ -465,13 +479,9 @@ function Composer({
           if (!file.type.startsWith("video/") || file.size > POST_MEDIA_MAX_BYTES) {
             throw new Error("Videos must be valid and under 25MB");
           }
-          const duration = await videoDuration(file);
-          if (!Number.isFinite(duration) || duration <= 0 || duration > POST_VIDEO_MAX_SECONDS) {
-            throw new Error(`Videos must be ${POST_VIDEO_MAX_SECONDS} seconds or shorter`);
-          }
         }
         const path = await uploadFile("media", user.id, file, {
-          alreadyCompressed: kind === "image",
+          alreadyCompressed: true,
         });
         if (kind === "image") imagePath = path;
         else videoPath = path;
@@ -565,7 +575,7 @@ function Composer({
 
       {preparing && (
         <p className="mt-2 text-xs text-muted-foreground" role="status">
-          {preparingKind === "video" ? "Checking video limits…" : "Compressing image…"}
+          {preparingKind === "video" ? "Compressing video…" : "Compressing image…"}
         </p>
       )}
 
