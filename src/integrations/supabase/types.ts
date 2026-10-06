@@ -834,6 +834,13 @@ export type Database = {
           sender_id: string
         }[]
       }
+      poll_vote_counts: {
+        Args: { _poll: string }
+        Returns: {
+          option_id: string
+          votes: number
+        }[]
+      }
       send_compliment: {
         Args: { _recipient: string; _tag: string }
         Returns: boolean
