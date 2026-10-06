@@ -701,7 +701,7 @@ function ChatPane({
     const text = sanitizeText(draft, 2000);
     if (!text || !user) return;
     if (!limits.canChatMatches) {
-      toast.error("Messaging needs the Mid or Full plan");
+      toast.error("Messaging needs Campus Socialite or Campus VIP");
       return;
     }
     setSending(true);

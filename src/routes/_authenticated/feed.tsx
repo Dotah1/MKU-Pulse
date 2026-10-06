@@ -380,7 +380,7 @@ function Composer({
       return;
     }
     if (want === "video" && !limits.canPostVideo) {
-      toast.error("Video posts need the Mid or Full plan");
+      toast.error("Video posts need Campus Socialite or Campus VIP");
       return;
     }
     if (want === "video" && user) {

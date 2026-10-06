@@ -38,6 +38,7 @@ export interface Profile {
 
 export interface TierLimits {
   label: string;
+  symbol: string;
   postsPerDay: number;
   canPostImage: boolean;
   canPostVideo: boolean;
@@ -49,7 +50,8 @@ export interface TierLimits {
 
 export const TIER_LIMITS: Record<Tier, TierLimits> = {
   free: {
-    label: "Free",
+    label: "Campus Citizen",
+    symbol: "●",
     postsPerDay: 2,
     canPostImage: true,
     canPostVideo: false,
@@ -59,7 +61,8 @@ export const TIER_LIMITS: Record<Tier, TierLimits> = {
     canChatMatches: true,
   },
   mid: {
-    label: "Mid",
+    label: "Campus Socialite",
+    symbol: "⚡",
     postsPerDay: 5,
     canPostImage: true,
     canPostVideo: true,
@@ -69,7 +72,8 @@ export const TIER_LIMITS: Record<Tier, TierLimits> = {
     canChatMatches: true,
   },
   full: {
-    label: "Full",
+    label: "Campus VIP",
+    symbol: "♛",
     postsPerDay: 10,
     canPostImage: true,
     canPostVideo: true,

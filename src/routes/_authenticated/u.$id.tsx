@@ -17,6 +17,7 @@ import { StoredImage, UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getOrCreateConversation } from "@/lib/campus-data";
+import { TIER_LIMITS } from "@/lib/campus";
 import { ReceivedCompliments, SendCompliment } from "@/components/ComplimentsPanel";
 
 export const Route = createFileRoute("/_authenticated/u/$id")({
@@ -213,7 +214,7 @@ function PublicProfilePage() {
               {profile.tier !== "free" && (
                 <Badge variant="secondary">
                   <Star className="mr-1 size-3" aria-hidden="true" />
-                  {profile.tier === "full" ? "Full" : "Mid"} plan
+                  {TIER_LIMITS[profile.tier].label}
                 </Badge>
               )}
             </div>

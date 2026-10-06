@@ -557,9 +557,9 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
         <h2 className="font-display text-lg font-bold">Your plan</h2>
         <p className="text-sm text-muted-foreground">
           {freeAccessMode
-            ? "Free Access Mode is on — everyone has full features right now."
+            ? "Free Access Mode is on — Campus Citizens have Campus Socialite features right now."
             : currentTier === "free"
-              ? "You're on the Free plan."
+              ? "You're a Campus Citizen."
               : `${TIER_LIMITS[currentTier].label} plan · ${daysLeft(profile?.tier_expires_at ?? null)} days left`}
         </p>
       </div>
@@ -609,8 +609,8 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
               onChange={(e) => setWanted(e.target.value as "mid" | "full")}
               className="mt-1 min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
             >
-              <option value="mid">Mid — KES {PRICES.mid}</option>
-              <option value="full">Full — KES {PRICES.full}</option>
+              <option value="mid">Campus Socialite — KES {PRICES.mid}</option>
+              <option value="full">Campus VIP — KES {PRICES.full}</option>
             </select>
           </div>
           <div>

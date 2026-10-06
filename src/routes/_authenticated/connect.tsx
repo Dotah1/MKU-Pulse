@@ -400,7 +400,7 @@ function ConnectPage() {
   const openChat = async (otherId: string) => {
     if (!user) return;
     if (!limits.canChatMatches) {
-      toast.error("Chatting with matches needs the Mid or Full plan");
+      toast.error("Chatting with matches needs Campus Socialite or Campus VIP");
       void navigate({ to: "/profile" });
       return;
     }
