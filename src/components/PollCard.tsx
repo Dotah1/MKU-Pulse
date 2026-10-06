@@ -51,16 +51,26 @@ export function PollCard({
     !poll.is_active || (poll.closes_at ? new Date(poll.closes_at).getTime() < Date.now() : false);
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from("poll_votes")
-      .select("option_id, user_id")
-      .eq("poll_id", poll.id);
-    const rows = (data ?? []) as { option_id: string; user_id: string }[];
+    const [{ data: tallies }, { data: mine }] = await Promise.all([
+      supabase.rpc("poll_vote_counts", { _poll: poll.id }),
+      user
+        ? supabase
+            .from("poll_votes")
+            .select("option_id")
+            .eq("poll_id", poll.id)
+            .eq("user_id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
     const map: Record<string, number> = {};
-    for (const r of rows) map[r.option_id] = (map[r.option_id] ?? 0) + 1;
+    let sum = 0;
+    for (const r of (tallies ?? []) as { option_id: string; votes: number }[]) {
+      map[r.option_id] = Number(r.votes);
+      sum += Number(r.votes);
+    }
     setCounts(map);
-    setTotal(rows.length);
-    setMyOption(rows.find((r) => r.user_id === user?.id)?.option_id ?? null);
+    setTotal(sum);
+    setMyOption((mine as { option_id: string } | null)?.option_id ?? null);
   }, [poll.id, user?.id]);
 
   const scheduleLoad = useCallback(() => {
