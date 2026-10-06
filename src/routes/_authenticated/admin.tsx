@@ -532,7 +532,7 @@ function AdminPage() {
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <div>
-            <Label htmlFor="mid-price">Mid plan (KES)</Label>
+            <Label htmlFor="mid-price">Campus Socialite (KES)</Label>
             <Input
               id="mid-price"
               inputMode="numeric"
@@ -542,7 +542,7 @@ function AdminPage() {
             />
           </div>
           <div>
-            <Label htmlFor="full-price">Full plan (KES)</Label>
+            <Label htmlFor="full-price">Campus VIP (KES)</Label>
             <Input
               id="full-price"
               inputMode="numeric"

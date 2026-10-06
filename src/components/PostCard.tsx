@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { timeAgo, sanitizeText } from "@/lib/campus";
+import { TIER_LIMITS, timeAgo, sanitizeText } from "@/lib/campus";
 import { deletePostWithMedia } from "@/lib/media.functions";
 import { getOrCreateConversation, type MiniProfile } from "@/lib/campus-data";
 import { shareToWhatsApp } from "@/lib/share";
@@ -285,6 +285,7 @@ export function PostCard({
   };
 
   const name = author?.full_name || "Student";
+  const authorPlan = TIER_LIMITS[author?.tier ?? "free"];
   const threads = comments.filter((c) => !c.parent_id);
   const repliesOf = (id: string) => comments.filter((c) => c.parent_id === id);
   const category = POST_CATEGORY_RULES.find((rule) => rule.pattern.test(post.content));
@@ -334,9 +335,19 @@ export function PostCard({
           />
         </Link>
         <div className="min-w-0">
-          <Link to="/u/$id" params={{ id: post.user_id }} className="block">
-            <p className="truncate text-sm font-semibold hover:underline">{name}</p>
-          </Link>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Link to="/u/$id" params={{ id: post.user_id }} className="min-w-0">
+              <p className="truncate text-sm font-semibold hover:underline">{name}</p>
+            </Link>
+            <Badge
+              variant={author?.tier === "full" ? "default" : "secondary"}
+              className="h-5 shrink-0 px-1.5 text-[10px] font-semibold"
+              aria-label={`${authorPlan.label} member`}
+            >
+              <span aria-hidden="true">{authorPlan.symbol}</span>
+              <span className="hidden sm:inline">{authorPlan.label}</span>
+            </Badge>
+          </div>
           <p className="text-xs text-muted-foreground">
             {author ? `Year ${author.year_of_study} · ${author.major || "Student"} · ` : ""}
             {timeAgo(post.created_at)}
