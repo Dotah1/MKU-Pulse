@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Image as ImageIcon, Loader2, Video, X } from "lucide-react";
+import { ArrowUp, Image as ImageIcon, Loader2, Sparkles, Video, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCampus } from "@/hooks/useCampus";
 import { PostCard, usePostAuthors, type PostRow } from "@/components/PostCard";
@@ -27,6 +27,7 @@ const FEED_FILTERS = [
 
 type FeedFilter = (typeof FEED_FILTERS)[number]["id"];
 const POSTS_PAGE_SIZE = 20;
+const MAX_REFRESH_POSTS = 100;
 const RECENT_POSTS_KEY = "mku_recent_posts";
 
 interface RecentPostDraft {
@@ -121,6 +122,8 @@ function FeedPage() {
   const [polls, setPolls] = useState<PollRow[]>([]);
   const [pollOptions, setPollOptions] = useState<Record<string, PollOptionRow[]>>({});
   const [loading, setLoading] = useState(true);
+  const [refreshingNewPosts, setRefreshingNewPosts] = useState(false);
+  const [newPostCount, setNewPostCount] = useState(0);
   const [loadingMorePosts, setLoadingMorePosts] = useState(false);
   const [hasMorePosts, setHasMorePosts] = useState(true);
   const [usedToday, setUsedToday] = useState(0);
@@ -128,16 +131,21 @@ function FeedPage() {
   const [activeFilter, setActiveFilter] = useState<FeedFilter>("all");
   const postsOffset = useRef(0);
   const feedGeneration = useRef(0);
+  const knownPostIds = useRef(new Set<string>());
+  const pendingNewPostIds = useRef(new Set<string>());
+  const hasLoadedFeed = useRef(false);
   const authors = usePostAuthors(posts);
   const filteredPosts = useMemo(
     () => posts.filter((post) => postMatchesFilter(post.content, activeFilter)),
     [posts, activeFilter],
   );
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     const generation = ++feedGeneration.current;
-    setLoading(true);
-    postsOffset.current = 0;
+    if (!silent) setLoading(true);
+    const pageSize = silent
+      ? Math.max(POSTS_PAGE_SIZE, Math.min(pendingNewPostIds.current.size, MAX_REFRESH_POSTS))
+      : POSTS_PAGE_SIZE;
     const [{ data, error }, pollData] = await Promise.all([
       supabase
         .from("posts")
@@ -146,23 +154,29 @@ function FeedPage() {
         )
         .order("is_announcement", { ascending: false })
         .order("created_at", { ascending: false })
-        .range(0, POSTS_PAGE_SIZE - 1),
+        .range(0, pageSize - 1),
       fetchFeedPolls(),
     ]);
     if (generation !== feedGeneration.current) return;
     if (error) {
       toast.error(error.message);
-      setPosts([]);
-      setHasMorePosts(false);
+      if (!silent) {
+        setPosts([]);
+        setHasMorePosts(false);
+      }
     } else {
       const rows = (data ?? []) as PostRow[];
       setPosts(rows);
       postsOffset.current = rows.length;
-      setHasMorePosts(rows.length === POSTS_PAGE_SIZE);
+      knownPostIds.current = new Set(rows.map((post) => post.id));
+      for (const post of rows) pendingNewPostIds.current.delete(post.id);
+      setNewPostCount(pendingNewPostIds.current.size);
+      setHasMorePosts(rows.length === pageSize);
+      hasLoadedFeed.current = true;
     }
     setPolls(pollData.polls);
     setPollOptions(pollData.options);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, []);
 
   const loadMorePosts = async () => {
@@ -183,6 +197,11 @@ function FeedPage() {
       if (error) throw error;
       const rows = (data ?? []) as PostRow[];
       postsOffset.current = offset + rows.length;
+      for (const post of rows) {
+        knownPostIds.current.add(post.id);
+        pendingNewPostIds.current.delete(post.id);
+      }
+      setNewPostCount(pendingNewPostIds.current.size);
       setPosts((current) => {
         const ids = new Set(current.map((post) => post.id));
         return [...current, ...rows.filter((post) => !ids.has(post.id))];
@@ -200,6 +219,60 @@ function FeedPage() {
   }, [load]);
 
   useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`feed-posts-${user.id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
+        const inserted = payload.new as { id?: unknown };
+        if (
+          typeof inserted.id !== "string" ||
+          knownPostIds.current.has(inserted.id) ||
+          pendingNewPostIds.current.has(inserted.id)
+        ) {
+          return;
+        }
+        pendingNewPostIds.current.add(inserted.id);
+        setNewPostCount(pendingNewPostIds.current.size);
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
+  const checkForNewPosts = useCallback(async () => {
+    if (!user?.id || !hasLoadedFeed.current) return;
+    const { data, error } = await supabase
+      .from("posts")
+      .select("id, user_id")
+      .order("is_announcement", { ascending: false })
+      .order("created_at", { ascending: false })
+      .range(0, POSTS_PAGE_SIZE - 1);
+    if (error) return;
+
+    for (const post of data ?? []) {
+      if (!knownPostIds.current.has(post.id)) {
+        pendingNewPostIds.current.add(post.id);
+      }
+    }
+    setNewPostCount(pendingNewPostIds.current.size);
+  }, [user?.id]);
+
+  useEffect(() => {
+    let wasHidden = document.visibilityState === "hidden";
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        wasHidden = true;
+      } else if (wasHidden) {
+        wasHidden = false;
+        void checkForNewPosts();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [checkForNewPosts]);
+
+  useEffect(() => {
     if (!user) return;
     void countToday("posts", "user_id", user.id).then(setUsedToday);
   }, [user]);
@@ -214,6 +287,16 @@ function FeedPage() {
   const blockedUntil = profile?.post_block_until ?? null;
   const blocked = blockedUntil ? new Date(blockedUntil).getTime() > Date.now() : false;
 
+  const showNewPosts = async () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    setRefreshingNewPosts(true);
+    try {
+      await load(true);
+    } finally {
+      setRefreshingNewPosts(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -222,7 +305,9 @@ function FeedPage() {
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <p className="text-sm text-muted-foreground">
               {`${Math.max(0, limits.postsPerDay - usedToday)} of ${limits.postsPerDay} posts left today on your ${limits.label} plan`}
-              {tier === "free" ? " · upgrade for video" : ` · ${limits.videosPerDay} video${limits.videosPerDay === 1 ? "" : "s"}/day`}
+              {tier === "free"
+                ? " · upgrade for video"
+                : ` · ${limits.videosPerDay} video${limits.videosPerDay === 1 ? "" : "s"}/day`}
             </p>
             {pulseStreak !== null && (
               <Button
@@ -243,6 +328,40 @@ function FeedPage() {
         </div>
         <CampusToolsDialog />
       </header>
+
+      {newPostCount > 0 && (
+        <div className="sticky top-[4.5rem] z-30 rounded-2xl border border-primary/30 bg-card/95 p-3 shadow-lg backdrop-blur">
+          <div
+            className="flex flex-wrap items-center justify-between gap-3"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Sparkles className="size-5" aria-hidden="true" />
+              </span>
+              <p className="text-sm font-medium">
+                {newPostCount} fresh {newPostCount === 1 ? "post has" : "posts have"} landed on
+                campus.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              className="min-h-10 shrink-0 rounded-full"
+              onClick={() => void showNewPosts()}
+              disabled={refreshingNewPosts}
+            >
+              {refreshingNewPosts ? (
+                <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <ArrowUp className="mr-2 size-4" aria-hidden="true" />
+              )}
+              {refreshingNewPosts ? "Loading…" : "Show new posts"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter posts by hashtag">
         {FEED_FILTERS.map((filter) => (
@@ -393,7 +512,9 @@ function Composer({
         .not("video_url", "is", null)
         .gte("created_at", since.toISOString());
       if ((count ?? 0) >= limits.videosPerDay) {
-        toast.error(`You've used your ${limits.videosPerDay} video post${limits.videosPerDay === 1 ? "" : "s"} for today on the ${limits.label} plan`);
+        toast.error(
+          `You've used your ${limits.videosPerDay} video post${limits.videosPerDay === 1 ? "" : "s"} for today on the ${limits.label} plan`,
+        );
         return;
       }
     }
