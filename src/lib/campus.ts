@@ -106,7 +106,7 @@ export function effectiveTier(
   profile: Pick<Profile, "tier" | "tier_expires_at"> | null,
   freeAccessMode: boolean,
 ): Tier {
-  // Free Access Mode lifts free members to the Mid plan; anyone who paid keeps
+  // Free Access Mode lifts Campus Citizens to Campus Socialite; anyone who paid keeps
   // the plan they bought.
   const paid =
     profile && profile.tier !== "free" && !isExpired(profile.tier_expires_at) ? profile.tier : null;

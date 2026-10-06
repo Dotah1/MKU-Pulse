@@ -17,7 +17,7 @@ import { StoredImage, UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getOrCreateConversation } from "@/lib/campus-data";
-import { TIER_LIMITS } from "@/lib/campus";
+import { TIER_LIMITS, type Tier } from "@/lib/campus";
 import { ReceivedCompliments, SendCompliment } from "@/components/ComplimentsPanel";
 
 export const Route = createFileRoute("/_authenticated/u/$id")({
@@ -49,7 +49,7 @@ interface PublicProfile {
   year_of_study: number;
   bio: string;
   interests: string[] | null;
-  tier: string;
+  tier: Tier;
   is_private: boolean;
 }
 
