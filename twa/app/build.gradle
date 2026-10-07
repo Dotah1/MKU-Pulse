@@ -55,10 +55,10 @@ android {
     namespace "com.mku.pulse"
     defaultConfig {
         applicationId "com.mku.pulse"
-        minSdkVersion 21
+        minSdkVersion 23
         targetSdkVersion 36
-        versionCode 3
-        versionName "3"
+        versionCode 4
+        versionName "4"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name
@@ -207,7 +207,7 @@ repositories {
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
-    
-        implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.6.2'
+    // 2.7.3 supports high-priority notification delegation metadata and minSdk 23.
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.3'
     
 }

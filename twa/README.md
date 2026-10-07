@@ -7,6 +7,8 @@ This is a Bubblewrap-generated Trusted Web Activity for:
 - Launch route: `/feed`
 - Display: standalone
 - Notifications: enabled because the web app uses push messaging
+- Notification delegation: high-priority channel enabled for heads-up alerts
+- Minimum Android version: Android 6.0 (API 23)
 - Native geolocation and Play Billing: disabled
 
 ## Build locally
@@ -21,6 +23,17 @@ bubblewrap build
 ```
 
 Outputs include a signed APK for device testing and a signed Android App Bundle for Play Console upload.
+
+## Heads-up notifications
+
+The TWA uses Android Browser Helper notification delegation. The manifest enables its official
+high-priority notification-channel metadata, so eligible push notifications can appear as heads-up
+alerts. Android still lets the user change a channel's importance, and battery-saver or Do Not Disturb
+settings can suppress heads-up presentation.
+
+After installing an updated build, check **Android Settings → Apps → MKU Pulse → Notifications** and
+make sure the MKU Pulse notification channel is set to **High**. Android notification-channel choices
+are persistent, so uninstall the old build before testing if an earlier channel was already set to low.
 
 ## Digital Asset Links
 

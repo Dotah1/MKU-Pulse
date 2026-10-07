@@ -19,8 +19,8 @@
     "path": "keystore/mku-pulse-release.keystore",
     "alias": "mku_pulse_release"
   },
-  "appVersionName": "3",
-  "appVersionCode": 3,
+  "appVersionName": "4",
+  "appVersionCode": 4,
   "shortcuts": [
     {
       "name": "Campus Feed",
@@ -52,7 +52,7 @@
   "isChromeOSOnly": false,
   "isMetaQuest": false,
   "fullScopeUrl": "https://mku-pulse.vercel.app/",
-  "minSdkVersion": 21,
+  "minSdkVersion": 23,
   "orientation": "portrait-primary",
   "fingerprints": [
     {
@@ -69,5 +69,5 @@
     "standalone",
     "minimal-ui"
   ],
-  "appVersion": "3"
+  "appVersion": "4"
 }

@@ -183,7 +183,11 @@
             android:enabled="@bool/enableNotification"
             android:exported="@bool/enableNotification">
 
-            
+                <!-- Ask Android Browser Helper to create the delegated channel at
+                     IMPORTANCE_HIGH so eligible pushes can appear heads-up. -->
+                <meta-data
+                    android:name="androidx.browser.trusted.USE_HIGH_PRI_NOTIFICATIONS"
+                    android:value="true" />
                 <meta-data
                     android:name="android.support.customtabs.trusted.SMALL_ICON"
                     android:resource="@drawable/ic_notification_icon" />
