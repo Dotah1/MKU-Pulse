@@ -27,12 +27,13 @@ import {
 interface Props {
   me: string;
   other: string;
-  name?: string;
+  name?: string | undefined;
   allowUnmatch?: boolean;
   onChange?: (state: "blocked" | "unblocked" | "unmatched") => void;
 }
 
-export function SafetyMenu({ me, other, name = "this student", allowUnmatch, onChange }: Props) {
+export function SafetyMenu({ me, other, name: rawName, allowUnmatch, onChange }: Props) {
+  const name = rawName || "this student";
   const [blocked, setBlocked] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [category, setCategory] = useState<string>(REPORT_CATEGORIES[0]);

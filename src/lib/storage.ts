@@ -9,7 +9,7 @@ const MAX_IMAGE_EDGE = 1200;
 const IMAGE_QUALITY = 0.8;
 const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
 const R2_MEDIA_WORKER_URL = (
-  (import.meta.env.VITE_R2_MEDIA_WORKER_URL as string | undefined) ??
+  (import.meta.env['VITE_R2_MEDIA_WORKER_URL'] as string | undefined) ??
   "https://mku-pulse-media.ogunavivian11.workers.dev"
 ).replace(/\/$/, "");
 let authGeneration = 0;
