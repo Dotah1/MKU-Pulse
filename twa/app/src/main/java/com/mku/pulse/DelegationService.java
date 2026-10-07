@@ -18,6 +18,7 @@ public class DelegationService extends
         com.google.androidbrowserhelper.trusted.DelegationService {
     private static final String CHANNEL_ID = "mku_pulse_alerts";
     private static final String CHANNEL_NAME = "MKU Pulse Alerts";
+    private static final long[] VIBRATION_PATTERN = {0, 180, 80, 180};
 
     @Override
     public void onCreate() {
@@ -52,9 +53,12 @@ public class DelegationService extends
         NotificationManager manager =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null || manager.getNotificationChannel(CHANNEL_ID) != null) return;
-        manager.createNotificationChannel(new NotificationChannel(
+        NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_HIGH));
+                NotificationManager.IMPORTANCE_HIGH);
+        channel.enableVibration(true);
+        channel.setVibrationPattern(VIBRATION_PATTERN);
+        manager.createNotificationChannel(channel);
     }
 }

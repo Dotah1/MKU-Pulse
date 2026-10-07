@@ -27,12 +27,13 @@ Outputs include a signed APK for device testing and a signed Android App Bundle 
 ## Heads-up notifications
 
 The TWA uses Android Browser Helper notification delegation and routes delegated notifications through
-an app-owned **MKU Pulse Alerts** channel created at `IMPORTANCE_HIGH` on first use. This makes heads-up
-alerts the default for fresh installs. Android still lets the user change a channel's importance, and
-battery-saver or Do Not Disturb settings can suppress heads-up presentation.
+an app-owned **MKU Pulse Alerts** channel created at `IMPORTANCE_HIGH` on first use, with a short
+double-vibration pattern (`180ms`, pause, `180ms`). This makes heads-up alerts and vibration the default
+for fresh installs. Android still lets the user change a channel's importance or vibration setting, and
+battery-saver or Do Not Disturb settings can suppress alerts.
 
 After installing an updated build, check **Android Settings → Apps → MKU Pulse → Notifications** and
-make sure **MKU Pulse Alerts** is set to **High** and **Pop on screen**. Android notification-channel
+make sure **MKU Pulse Alerts** is set to **High**, **Pop on screen**, and **Allow vibration**. Android notification-channel
 choices are persistent, so uninstall the old build before testing if an earlier channel was already set
 to low.
 
