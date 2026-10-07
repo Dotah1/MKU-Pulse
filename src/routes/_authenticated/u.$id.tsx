@@ -11,6 +11,8 @@ import {
   Star,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { SafetyMenu } from "@/components/SafetyMenu";
+import { isBlockedWith } from "@/lib/blocks";
 import { useCampus } from "@/hooks/useCampus";
 import { PostCard, type PostRow } from "@/components/PostCard";
 import { StoredImage, UserAvatar } from "@/components/StoredMedia";
@@ -41,6 +43,7 @@ export const Route = createFileRoute("/_authenticated/u/$id")({
 });
 
 interface PublicProfile {
+  mku_verified?: boolean;
   id: string;
   streak_count?: number;
   full_name: string;
@@ -90,6 +93,11 @@ function PublicProfilePage() {
   const [loading, setLoading] = useState(true);
 
   const mine = user?.id === id;
+  const [blocked, setBlocked] = useState(false);
+  useEffect(() => {
+    if (!user?.id || user.id === id) return;
+    void isBlockedWith(user.id, id).then(setBlocked);
+  }, [user?.id, id]);
 
   useEffect(() => {
     let active = true;
@@ -99,7 +107,7 @@ function PublicProfilePage() {
         supabase
           .from("profiles")
           .select(
-            "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_private, streak_count",
+            "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_private, streak_count, mku_verified",
           )
           .eq("id", id)
           .maybeSingle(),
@@ -199,6 +207,9 @@ function PublicProfilePage() {
           )}
           <div className="min-w-0 flex-1 text-center sm:text-left">
             <h1 className="font-display text-2xl font-bold">{profile.full_name}</h1>
+            {profile.mku_verified && (
+              <Badge className="mt-1">✓ Verified MKU Student</Badge>
+            )}
             <p className="mt-1 text-sm text-muted-foreground">
               Year {profile.year_of_study} · {profile.major || "Student"}
             </p>
@@ -238,9 +249,21 @@ function PublicProfilePage() {
                   Edit your profile
                 </Button>
               ) : (
-                <Button className="min-h-11" onClick={message}>
-                  <MessageCircle className="mr-2 size-4" aria-hidden="true" /> Message
-                </Button>
+                <>
+                  {!blocked && (
+                    <Button className="min-h-11" onClick={message}>
+                      <MessageCircle className="mr-2 size-4" aria-hidden="true" /> Message
+                    </Button>
+                  )}
+                  {user && (
+                    <SafetyMenu
+                      me={user.id}
+                      other={id}
+                      name={profile?.full_name}
+                      onChange={(s) => setBlocked(s === "blocked")}
+                    />
+                  )}
+                </>
               )}
             </div>
           </div>

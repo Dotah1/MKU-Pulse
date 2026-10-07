@@ -3,6 +3,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Reply, Send, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { SafetyMenu } from "@/components/SafetyMenu";
+import { isBlockedWith } from "@/lib/blocks";
 import { notify } from "@/lib/notify";
 import { useCampus } from "@/hooks/useCampus";
 import { StoredImage, UserAvatar } from "@/components/StoredMedia";
@@ -314,6 +316,11 @@ function ChatPane({
     () => (conversation.user_a === user?.id ? conversation.user_b : conversation.user_a),
     [conversation, user?.id],
   );
+  const [chatBlocked, setChatBlocked] = useState(false);
+  useEffect(() => {
+    if (!currentUserId) return;
+    void isBlockedWith(currentUserId, otherId).then(setChatBlocked);
+  }, [currentUserId, otherId]);
 
   const markConversationRead = useCallback(() => {
     if (!currentUserId) return;
@@ -764,7 +771,7 @@ function ChatPane({
             className="size-9"
           />
         </Link>
-        <div>
+        <div className="min-w-0 flex-1">
           <Link to="/u/$id" params={{ id: otherId }}>
             <p className="text-sm font-semibold hover:underline">{other?.full_name ?? "Student"}</p>
           </Link>
@@ -772,6 +779,14 @@ function ChatPane({
             {otherTyping ? "typing…" : other?.major || "MKU Pulse"}
           </p>
         </div>
+        {currentUserId && (
+          <SafetyMenu
+            me={currentUserId}
+            other={otherId}
+            name={other?.full_name ?? undefined}
+            onChange={(s) => setChatBlocked(s === "blocked")}
+          />
+        )}
       </header>
 
       <div ref={messageList} className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
@@ -899,6 +914,12 @@ function ChatPane({
         </div>
       )}
 
+      {chatBlocked ? (
+        <p className="border-t border-border p-4 text-center text-sm text-muted-foreground">
+          This conversation is no longer available.
+        </p>
+      ) : (
+      <>
       <div className="border-t border-border px-3 pt-2" aria-label="Campus slang quick replies">
         <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Campus quick replies</p>
         <div className="flex gap-2 overflow-x-auto pb-2">
@@ -941,6 +962,8 @@ function ChatPane({
           <Send className="size-4" aria-hidden="true" />
         </Button>
       </div>
+      </>
+      )}
     </div>
   );
 }
