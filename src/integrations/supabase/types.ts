@@ -32,6 +32,42 @@ export type Database = {
         }
         Relationships: []
       }
+      blocked_users: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blocked_users_blocked_id_fkey"
+            columns: ["blocked_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blocked_users_blocker_id_fkey"
+            columns: ["blocker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campus_crushes: {
         Row: {
           compliment_tag: string
@@ -293,6 +329,41 @@ export type Database = {
             columns: ["reply_to_id"]
             isOneToOne: false
             referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mku_verification_codes: {
+        Row: {
+          attempts: number
+          code_hash: string
+          created_at: string
+          email: string
+          expires_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          code_hash: string
+          created_at?: string
+          email: string
+          expires_at: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          code_hash?: string
+          created_at?: string
+          email?: string
+          expires_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mku_verification_codes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -590,18 +661,21 @@ export type Database = {
         Row: {
           email: string
           id: string
+          mku_email: string | null
           phone: string
           updated_at: string
         }
         Insert: {
           email?: string
           id: string
+          mku_email?: string | null
           phone?: string
           updated_at?: string
         }
         Update: {
           email?: string
           id?: string
+          mku_email?: string | null
           phone?: string
           updated_at?: string
         }
@@ -620,6 +694,7 @@ export type Database = {
           is_private: boolean
           last_active_on: string | null
           major: string
+          mku_verified: boolean
           notifications_enabled: boolean
           pending_tier: Database["public"]["Enums"]["sub_tier"] | null
           post_block_until: string | null
@@ -641,6 +716,7 @@ export type Database = {
           is_private?: boolean
           last_active_on?: string | null
           major?: string
+          mku_verified?: boolean
           notifications_enabled?: boolean
           pending_tier?: Database["public"]["Enums"]["sub_tier"] | null
           post_block_until?: string | null
@@ -662,6 +738,7 @@ export type Database = {
           is_private?: boolean
           last_active_on?: string | null
           major?: string
+          mku_verified?: boolean
           notifications_enabled?: boolean
           pending_tier?: Database["public"]["Enums"]["sub_tier"] | null
           post_block_until?: string | null
@@ -806,7 +883,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      blocked_user_ids: { Args: never; Returns: string[] }
       check_in_streak: { Args: { _today: string }; Returns: number }
+      conversation_blocked: { Args: { _conv: string }; Returns: boolean }
       delete_expired_posts: { Args: never; Returns: number }
       effective_tier: {
         Args: { _user_id: string }
@@ -823,7 +902,12 @@ export type Database = {
         Args: { _conv: string; _user: string }
         Returns: boolean
       }
+      is_blocked_between: { Args: { _a: string; _b: string }; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
+      mark_mku_verified: {
+        Args: { _email: string; _user: string }
+        Returns: undefined
+      }
       my_compliments: {
         Args: never
         Returns: {
