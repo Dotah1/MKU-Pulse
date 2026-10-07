@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { Heart, Loader2, Star, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SafetyMenu } from "@/components/SafetyMenu";
-import { fetchBlockedIds, isBlockedWith } from "@/lib/blocks";
+import { fetchBlockedIds } from "@/lib/blocks";
 import { notify } from "@/lib/notify";
 import { useCampus } from "@/hooks/useCampus";
 import { StoredImage, UserAvatar } from "@/components/StoredMedia";
@@ -108,6 +108,7 @@ function ConnectPage() {
     }
     const seen = new Set((swiped ?? []).map((s) => s.swipee_id as string));
     seen.add(user.id);
+    for (const blockedId of await fetchBlockedIds()) seen.add(blockedId);
     seenProfileIds.current = seen;
 
     const query = supabase
@@ -190,7 +191,10 @@ function ConnectPage() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       if (generation !== matchesRequestGeneration.current) return;
-      const rows = (data ?? []) as MatchRow[];
+      const blockedIds = await fetchBlockedIds();
+      const rows = ((data ?? []) as MatchRow[]).filter(
+        (match) => !blockedIds.has(match.user_a === user.id ? match.user_b : match.user_a),
+      );
       setMatches(rows);
       const others = rows.map((match) => (match.user_a === user.id ? match.user_b : match.user_a));
       const profiles = await fetchProfiles(others);
@@ -702,14 +706,27 @@ function ConnectPage() {
                           {person?.major || "Student"}
                         </p>
                       </Link>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-2 min-h-11 w-full"
-                        onClick={() => void openChat(otherId)}
-                      >
-                        Message
-                      </Button>
+                      <div className="mt-2 flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="min-h-11 flex-1"
+                          onClick={() => void openChat(otherId)}
+                        >
+                          Message
+                        </Button>
+                        {user && (
+                          <SafetyMenu
+                            me={user.id}
+                            other={otherId}
+                            name={person?.full_name}
+                            allowUnmatch
+                            onChange={() =>
+                              setMatches((prev) => prev.filter((m) => m.id !== match.id))
+                            }
+                          />
+                        )}
+                      </div>
                     </div>
                   );
                 })}

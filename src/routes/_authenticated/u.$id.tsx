@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SafetyMenu } from "@/components/SafetyMenu";
-import { fetchBlockedIds, isBlockedWith } from "@/lib/blocks";
+import { isBlockedWith } from "@/lib/blocks";
 import { useCampus } from "@/hooks/useCampus";
 import { PostCard, type PostRow } from "@/components/PostCard";
 import { StoredImage, UserAvatar } from "@/components/StoredMedia";
@@ -92,6 +92,11 @@ function PublicProfilePage() {
   const [loading, setLoading] = useState(true);
 
   const mine = user?.id === id;
+  const [blocked, setBlocked] = useState(false);
+  useEffect(() => {
+    if (!user?.id || user.id === id) return;
+    void isBlockedWith(user.id, id).then(setBlocked);
+  }, [user?.id, id]);
 
   useEffect(() => {
     let active = true;
@@ -240,9 +245,21 @@ function PublicProfilePage() {
                   Edit your profile
                 </Button>
               ) : (
-                <Button className="min-h-11" onClick={message}>
-                  <MessageCircle className="mr-2 size-4" aria-hidden="true" /> Message
-                </Button>
+                <>
+                  {!blocked && (
+                    <Button className="min-h-11" onClick={message}>
+                      <MessageCircle className="mr-2 size-4" aria-hidden="true" /> Message
+                    </Button>
+                  )}
+                  {user && (
+                    <SafetyMenu
+                      me={user.id}
+                      other={id}
+                      name={profile?.full_name}
+                      onChange={(s) => setBlocked(s === "blocked")}
+                    />
+                  )}
+                </>
               )}
             </div>
           </div>

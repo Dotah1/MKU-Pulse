@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Loader2, Reply, Send, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SafetyMenu } from "@/components/SafetyMenu";
-import { fetchBlockedIds, isBlockedWith } from "@/lib/blocks";
+import { isBlockedWith } from "@/lib/blocks";
 import { notify } from "@/lib/notify";
 import { useCampus } from "@/hooks/useCampus";
 import { StoredImage, UserAvatar } from "@/components/StoredMedia";
