@@ -11,6 +11,8 @@ import {
   Star,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { SafetyMenu } from "@/components/SafetyMenu";
+import { fetchBlockedIds, isBlockedWith } from "@/lib/blocks";
 import { useCampus } from "@/hooks/useCampus";
 import { PostCard, type PostRow } from "@/components/PostCard";
 import { StoredImage, UserAvatar } from "@/components/StoredMedia";
