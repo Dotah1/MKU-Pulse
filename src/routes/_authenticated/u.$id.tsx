@@ -43,6 +43,7 @@ export const Route = createFileRoute("/_authenticated/u/$id")({
 });
 
 interface PublicProfile {
+  mku_verified?: boolean;
   id: string;
   streak_count?: number;
   full_name: string;
@@ -106,7 +107,7 @@ function PublicProfilePage() {
         supabase
           .from("profiles")
           .select(
-            "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_private, streak_count",
+            "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_private, streak_count, mku_verified",
           )
           .eq("id", id)
           .maybeSingle(),
@@ -206,6 +207,9 @@ function PublicProfilePage() {
           )}
           <div className="min-w-0 flex-1 text-center sm:text-left">
             <h1 className="font-display text-2xl font-bold">{profile.full_name}</h1>
+            {profile.mku_verified && (
+              <Badge className="mt-1">✓ Verified MKU Student</Badge>
+            )}
             <p className="mt-1 text-sm text-muted-foreground">
               Year {profile.year_of_study} · {profile.major || "Student"}
             </p>
