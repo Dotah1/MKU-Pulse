@@ -1,0 +1,19 @@
+-- Cover foreign keys used by joins, RLS checks, and cascading deletes.
+create index if not exists conversations_user_b_idx on public.conversations (user_b);
+create index if not exists matches_user_b_idx on public.matches (user_b);
+create index if not exists mentor_applications_user_id_idx on public.mentor_applications (user_id);
+create index if not exists mentor_sessions_student_id_idx on public.mentor_sessions (student_id);
+create index if not exists messages_post_id_idx on public.messages (post_id);
+create index if not exists messages_reply_to_id_idx on public.messages (reply_to_id);
+create index if not exists messages_sender_id_idx on public.messages (sender_id);
+create index if not exists payment_requests_user_id_idx on public.payment_requests (user_id);
+create index if not exists poll_votes_option_id_idx on public.poll_votes (option_id);
+create index if not exists poll_votes_user_id_idx on public.poll_votes (user_id);
+create index if not exists polls_created_by_idx on public.polls (created_by);
+create index if not exists post_comments_user_id_idx on public.post_comments (user_id);
+create index if not exists post_likes_user_id_idx on public.post_likes (user_id);
+create index if not exists posts_user_id_idx on public.posts (user_id);
+create index if not exists push_subscriptions_user_id_idx on public.push_subscriptions (user_id);
+create index if not exists reports_reporter_id_idx on public.reports (reporter_id);
+create index if not exists swipes_swipee_id_idx on public.swipes (swipee_id);
+create index if not exists typing_state_user_id_idx on public.typing_state (user_id);
