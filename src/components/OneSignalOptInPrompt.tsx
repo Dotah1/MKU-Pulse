@@ -158,10 +158,14 @@ export function OneSignalOptInPrompt() {
       open={open}
       onOpenChange={(nextOpen) => {
         if (nextOpen) setOpen(true);
-        else if (!busy) decline();
       }}
     >
-      <DialogContent>
+      <DialogContent
+        showCloseButton={false}
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Get MKU Pulse campus alerts?</DialogTitle>
           <DialogDescription>
@@ -177,7 +181,7 @@ export function OneSignalOptInPrompt() {
             onClick={decline}
             disabled={busy}
           >
-            No thanks
+            Not now
           </Button>
           <Button type="button" className="min-h-11" onClick={() => void accept()} disabled={busy}>
             {busy ? "Enabling…" : "Yes, allow alerts"}
