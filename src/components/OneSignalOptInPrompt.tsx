@@ -123,6 +123,14 @@ export function OneSignalOptInPrompt() {
     setTargets(NO_TARGETS);
   };
 
+  const dismissWithoutDecision = () => {
+    if (busy) return;
+    // Accidental dismissal is not consent or rejection. Do not start the
+    // cooldown; the prompt will be eligible again when the app is reopened.
+    setOpen(false);
+    setTargets(NO_TARGETS);
+  };
+
   const accept = async () => {
     if (busy || !userId) return;
     setBusy(true);
@@ -158,14 +166,10 @@ export function OneSignalOptInPrompt() {
       open={open}
       onOpenChange={(nextOpen) => {
         if (nextOpen) setOpen(true);
+        else dismissWithoutDecision();
       }}
     >
-      <DialogContent
-        showCloseButton={false}
-        onPointerDownOutside={(event) => event.preventDefault()}
-        onInteractOutside={(event) => event.preventDefault()}
-        onEscapeKeyDown={(event) => event.preventDefault()}
-      >
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Get MKU Pulse campus alerts?</DialogTitle>
           <DialogDescription>
