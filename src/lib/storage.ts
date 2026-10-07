@@ -8,7 +8,20 @@ const MAX_PERSISTED_SIGNED_URLS = 100;
 const MAX_IMAGE_EDGE = 1200;
 const IMAGE_QUALITY = 0.8;
 const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
+const R2_MEDIA_WORKER_URL = (
+  import.meta.env.VITE_R2_MEDIA_WORKER_URL as string | undefined
+)?.replace(/\/$/, "");
 let authGeneration = 0;
+
+function isR2Path(path: string) {
+  return path.startsWith("r2:");
+}
+
+async function getAuthorizationHeader() {
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+  return accessToken ? `Bearer ${accessToken}` : null;
+}
 
 function storageKey(key: string) {
   return `${SIGNED_URL_STORAGE_PREFIX}${encodeURIComponent(key)}`;
@@ -113,6 +126,23 @@ export async function getSignedUrl(
   const generation = authGeneration;
   const request = (async () => {
     try {
+      if (isR2Path(path) && R2_MEDIA_WORKER_URL) {
+        const authorization = await getAuthorizationHeader();
+        if (!authorization) return null;
+        const response = await fetch(
+          `${R2_MEDIA_WORKER_URL}/sign?path=${encodeURIComponent(path)}`,
+          { headers: { Authorization: authorization } },
+        );
+        if (!response.ok) return null;
+        const payload = (await response.json()) as { url?: string; expiresIn?: number };
+        if (!payload.url || generation !== authGeneration) return null;
+        const lifetime = Math.max(60, Math.min(payload.expiresIn ?? 3600, 3600));
+        const entry = { url: payload.url, expires: Date.now() + (lifetime - 60) * 1000 };
+        cache.set(key, entry);
+        persistUrl(key, entry);
+        return entry.url;
+      }
+
       const { data, error } = await supabase.storage
         .from(bucket)
         .createSignedUrl(path, 60 * 60 * 6);
@@ -255,6 +285,28 @@ export async function uploadFile(
   };
   const ext =
     contentTypeExtension[upload.type] ?? upload.name.split(".").pop()?.toLowerCase() ?? "bin";
+  if (R2_MEDIA_WORKER_URL) {
+    try {
+      const authorization = await getAuthorizationHeader();
+      if (authorization) {
+        const form = new FormData();
+        form.set("bucket", bucket);
+        form.set("file", new File([upload], `upload.${ext}`, { type: upload.type }));
+        const response = await fetch(`${R2_MEDIA_WORKER_URL}/upload`, {
+          method: "POST",
+          headers: { Authorization: authorization },
+          body: form,
+        });
+        if (response.ok) {
+          const payload = (await response.json()) as { path?: string };
+          if (payload.path?.startsWith("r2:")) return payload.path;
+        }
+      }
+    } catch {
+      // R2 is an optional acceleration path during rollout; retain Supabase fallback.
+    }
+  }
+
   const path = `${userId}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from(bucket).upload(path, upload, {
     cacheControl: "3600",
@@ -300,9 +352,12 @@ const VIDEO_BITRATE = 1_200_000;
  */
 export async function compressVideoFile(file: File, maxSeconds: number): Promise<File> {
   if (typeof MediaRecorder === "undefined" || typeof document === "undefined") return file;
-  const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"].find(
-    (type) => MediaRecorder.isTypeSupported(type),
-  );
+  const mime = [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+    "video/mp4",
+  ].find((type) => MediaRecorder.isTypeSupported(type));
   if (!mime) return file;
 
   const url = URL.createObjectURL(file);
@@ -316,7 +371,11 @@ export async function compressVideoFile(file: File, maxSeconds: number): Promise
       video.onloadedmetadata = () => resolve();
       video.onerror = () => reject(new Error("Could not read video"));
     });
-    const scale = Math.min(1, VIDEO_MAX_EDGE / video.videoWidth, VIDEO_MAX_EDGE / video.videoHeight);
+    const scale = Math.min(
+      1,
+      VIDEO_MAX_EDGE / video.videoWidth,
+      VIDEO_MAX_EDGE / video.videoHeight,
+    );
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(2, Math.round((video.videoWidth * scale) / 2) * 2);
     canvas.height = Math.max(2, Math.round((video.videoHeight * scale) / 2) * 2);
@@ -335,7 +394,10 @@ export async function compressVideoFile(file: File, maxSeconds: number): Promise
       video.muted = true;
     }
 
-    const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: VIDEO_BITRATE });
+    const recorder = new MediaRecorder(stream, {
+      mimeType: mime,
+      videoBitsPerSecond: VIDEO_BITRATE,
+    });
     const chunks: Blob[] = [];
     recorder.ondataavailable = (event) => {
       if (event.data.size) chunks.push(event.data);

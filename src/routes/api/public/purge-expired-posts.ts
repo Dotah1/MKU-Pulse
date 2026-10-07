@@ -54,8 +54,11 @@ async function purgeExpiredPosts(request: Request): Promise<Response> {
       const paths = rows
         .flatMap((post) => [post.image_url, post.video_url])
         .filter((path): path is string => Boolean(path));
-      if (paths.length > 0) {
-        const { error: storageError } = await supabaseAdmin.storage.from("media").remove(paths);
+      const supabasePaths = paths.filter((path) => !path.startsWith("r2:"));
+      if (supabasePaths.length > 0) {
+        const { error: storageError } = await supabaseAdmin.storage
+          .from("media")
+          .remove(supabasePaths);
         if (storageError) throw storageError;
       }
 
