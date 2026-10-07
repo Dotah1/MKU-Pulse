@@ -146,17 +146,30 @@ function FeedPage() {
     const pageSize = silent
       ? Math.max(POSTS_PAGE_SIZE, Math.min(pendingNewPostIds.current.size, MAX_REFRESH_POSTS))
       : POSTS_PAGE_SIZE;
-    const [{ data, error }, pollData] = await Promise.all([
-      supabase
-        .from("posts")
-        .select(
-          "id, user_id, content, image_url, video_url, video_seconds, is_announcement, created_at",
-        )
-        .order("is_announcement", { ascending: false })
-        .order("created_at", { ascending: false })
-        .range(0, pageSize - 1),
-      fetchFeedPolls(),
-    ]);
+    let data: PostRow[] | null = null;
+    let error: { message: string } | null = null;
+    let pollData: { polls: PollRow[]; options: Record<string, PollOptionRow[]> } | null = null;
+    try {
+      const [postResult, loadedPolls] = await Promise.all([
+        supabase
+          .from("posts")
+          .select(
+            "id, user_id, content, image_url, video_url, video_seconds, is_announcement, created_at",
+          )
+          .order("is_announcement", { ascending: false })
+          .order("created_at", { ascending: false })
+          .range(0, pageSize - 1),
+        fetchFeedPolls(),
+      ]);
+      data = (postResult.data ?? []) as PostRow[];
+      error = postResult.error;
+      pollData = loadedPolls;
+    } catch (loadError) {
+      if (generation !== feedGeneration.current) return;
+      toast.error(loadError instanceof Error ? loadError.message : "Could not refresh the feed");
+      if (!silent) setLoading(false);
+      return;
+    }
     if (generation !== feedGeneration.current) return;
     if (error) {
       toast.error(error.message);
@@ -165,7 +178,7 @@ function FeedPage() {
         setHasMorePosts(false);
       }
     } else {
-      const rows = (data ?? []) as PostRow[];
+      const rows = data ?? [];
       setPosts(rows);
       postsOffset.current = rows.length;
       knownPostIds.current = new Set(rows.map((post) => post.id));
@@ -174,8 +187,10 @@ function FeedPage() {
       setHasMorePosts(rows.length === pageSize);
       hasLoadedFeed.current = true;
     }
-    setPolls(pollData.polls);
-    setPollOptions(pollData.options);
+    if (pollData) {
+      setPolls(pollData.polls);
+      setPollOptions(pollData.options);
+    }
     if (!silent) setLoading(false);
   }, []);
 

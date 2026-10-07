@@ -73,8 +73,6 @@ export function useNotifications(limit = 30) {
     } catch (loadError) {
       if (requestId !== loadRequestId.current) return;
       console.error("Could not load notifications", loadError);
-      setItems([]);
-      setItemsOwnerId(user.id);
       setError("Notifications couldn’t load. Please try again.");
     } finally {
       if (requestId === loadRequestId.current) setLoading(false);
@@ -123,17 +121,31 @@ export function useNotifications(limit = 30) {
   }, [user, profile?.notifications_enabled, load, instanceId]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
+    if (!user) return;
+    let timer: number | null = null;
+    const refresh = () => {
       setItems((current) =>
         current.filter(
           (notification) =>
             notification.kind !== "announcement" || !isAnnouncementExpired(notification.url),
         ),
       );
-      void load();
-    }, 60_000);
-    return () => window.clearInterval(timer);
-  }, [load]);
+      if (document.visibilityState === "visible") void load();
+    };
+    const schedule = () => {
+      if (timer !== null) window.clearInterval(timer);
+      timer =
+        document.visibilityState === "visible" ? window.setInterval(refresh, 5 * 60_000) : null;
+    };
+    document.addEventListener("visibilitychange", schedule);
+    window.addEventListener("focus", refresh);
+    schedule();
+    return () => {
+      if (timer !== null) window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", schedule);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [load, user]);
 
   const visibleItems = itemsOwnerId === (user?.id ?? null) ? items : [];
 

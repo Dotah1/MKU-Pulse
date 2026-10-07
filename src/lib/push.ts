@@ -149,6 +149,7 @@ export async function requestPushConsent(userId: string): Promise<boolean> {
     permission = await Notification.requestPermission();
   }
   if (permission !== "granted") return false;
+  if (!(await isWebPushSupported())) return false;
   grantPushConsent(userId);
   return true;
 }

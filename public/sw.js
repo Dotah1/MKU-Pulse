@@ -71,9 +71,20 @@ async function cacheFirst(request) {
   const cache = await caches.open(ASSET_CACHE);
   const cached = await cache.match(request);
   if (cached) return cached;
-  const response = await fetch(request);
-  if (isSafeStaticResponse(response)) await cache.put(request, response.clone());
-  return response;
+  try {
+    const response = await fetch(request);
+    if (isSafeStaticResponse(response)) await cache.put(request, response.clone());
+    return response;
+  } catch {
+    const offline = await caches.match("/offline.html");
+    return (
+      offline ||
+      new Response("This resource is unavailable offline.", {
+        status: 503,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      })
+    );
+  }
 }
 
 self.addEventListener("fetch", (event) => {

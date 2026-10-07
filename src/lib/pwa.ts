@@ -20,6 +20,27 @@ let registrationQueue: Promise<unknown> = Promise.resolve();
 let activeRegistration: ServiceWorkerRegistration | null = null;
 let activeConfigKey: string | null = null;
 
+async function waitForExpectedWorker(
+  registration: ServiceWorkerRegistration,
+  expectedScriptUrl: string,
+): Promise<ServiceWorkerRegistration | null> {
+  if (registration.active?.scriptURL === expectedScriptUrl) return registration;
+  const worker = registration.installing ?? registration.waiting;
+  if (worker) {
+    await new Promise<void>((resolve) => {
+      if (worker.state === "activated" || worker.state === "redundant") {
+        resolve();
+        return;
+      }
+      worker.addEventListener("statechange", () => {
+        if (worker.state === "activated" || worker.state === "redundant") resolve();
+      });
+    });
+  }
+  await navigator.serviceWorker.ready.catch(() => undefined);
+  return registration.active?.scriptURL === expectedScriptUrl ? registration : null;
+}
+
 function registerOfflineRefresh(registration: ServiceWorkerRegistration) {
   const sync = (registration as SyncCapableRegistration).sync;
   if (!sync || offlineListeners.has(registration)) return;
@@ -92,15 +113,18 @@ export async function registerPwaServiceWorker(
           appId: firebaseConfig.appId,
         }).toString();
       }
-      const registration = await navigator.serviceWorker.register(scriptUrl.toString(), {
+      const expectedScriptUrl = scriptUrl.toString();
+      const registration = await navigator.serviceWorker.register(expectedScriptUrl, {
         scope: "/",
         updateViaCache: "none",
       });
-      activeRegistration = registration;
+      const readyRegistration = await waitForExpectedWorker(registration, expectedScriptUrl);
+      if (!readyRegistration) return null;
+      activeRegistration = readyRegistration;
       activeConfigKey = configKey;
-      registerOfflineRefresh(registration);
-      void registerPeriodicRefresh(registration);
-      return registration;
+      registerOfflineRefresh(readyRegistration);
+      void registerPeriodicRefresh(readyRegistration);
+      return readyRegistration;
     } catch {
       return null;
     }

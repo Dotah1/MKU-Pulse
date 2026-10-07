@@ -256,15 +256,16 @@ export async function fetchFeedPolls(): Promise<{
   polls: PollRow[];
   options: Record<string, PollOptionRow[]>;
 }> {
-  const { data: polls } = await supabase
+  const { data: polls, error: pollsError } = await supabase
     .from("polls")
     .select("id, created_by, question, image_url, is_active, closes_at, created_at")
     .order("created_at", { ascending: false })
 
     .limit(10);
+  if (pollsError) throw pollsError;
   const list = (polls ?? []) as PollRow[];
   if (list.length === 0) return { polls: [], options: {} };
-  const { data: opts } = await supabase
+  const { data: opts, error: optionsError } = await supabase
     .from("poll_options")
     .select("id, poll_id, label, position")
     .in(
@@ -272,6 +273,7 @@ export async function fetchFeedPolls(): Promise<{
       list.map((p) => p.id),
     )
     .order("position", { ascending: true });
+  if (optionsError) throw optionsError;
   const grouped: Record<string, PollOptionRow[]> = {};
   for (const o of (opts ?? []) as PollOptionRow[]) {
     (grouped[o.poll_id] ??= []).push(o);
