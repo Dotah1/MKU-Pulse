@@ -19,8 +19,8 @@
     "path": "keystore/mku-pulse-release.keystore",
     "alias": "mku_pulse_release"
   },
-  "appVersionName": "4",
-  "appVersionCode": 4,
+  "appVersionName": "6",
+  "appVersionCode": 6,
   "shortcuts": [
     {
       "name": "Campus Feed",
@@ -69,5 +69,5 @@
     "standalone",
     "minimal-ui"
   ],
-  "appVersion": "4"
+  "appVersion": "6"
 }
