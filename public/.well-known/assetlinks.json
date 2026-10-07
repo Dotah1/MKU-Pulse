@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.mku.pulse",
+      "sha256_cert_fingerprints": [
+        "5E:DA:1E:8A:61:7E:6A:76:09:A9:9B:7D:93:F0:A3:D4:16:89:FD:D9:B5:4C:D4:0E:A9:9C:C7:85:58:7B:1E:56"
+      ]
+    }
+  }
+]

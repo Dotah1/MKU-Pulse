@@ -1,0 +1,73 @@
+{
+  "packageId": "com.mku.pulse",
+  "host": "mku-pulse.vercel.app",
+  "name": "MKU Pulse — Campus Social",
+  "launcherName": "MKU Pulse",
+  "display": "standalone",
+  "themeColor": "#3F83BD",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#F4FAFF",
+  "enableNotifications": true,
+  "startUrl": "/feed",
+  "iconUrl": "https://mku-pulse.vercel.app/icons/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "keystore/mku-pulse-release.keystore",
+    "alias": "mku_pulse_release"
+  },
+  "appVersionName": "3",
+  "appVersionCode": 3,
+  "shortcuts": [
+    {
+      "name": "Campus Feed",
+      "shortName": "Feed",
+      "url": "https://mku-pulse.vercel.app/feed",
+      "chosenIconUrl": "https://mku-pulse.vercel.app/icons/icon-192.png"
+    },
+    {
+      "name": "Connect with Students",
+      "shortName": "Connect",
+      "url": "https://mku-pulse.vercel.app/connect",
+      "chosenIconUrl": "https://mku-pulse.vercel.app/icons/icon-192.png"
+    },
+    {
+      "name": "Messages",
+      "shortName": "Chat",
+      "url": "https://mku-pulse.vercel.app/messages",
+      "chosenIconUrl": "https://mku-pulse.vercel.app/icons/icon-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://mku-pulse.vercel.app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://mku-pulse.vercel.app/",
+  "minSdkVersion": 21,
+  "orientation": "portrait-primary",
+  "fingerprints": [
+    {
+      "packageName": "com.mku.pulse",
+      "sha256Cert": "5E:DA:1E:8A:61:7E:6A:76:09:A9:9B:7D:93:F0:A3:D4:16:89:FD:D9:B5:4C:D4:0E:A9:9C:C7:85:58:7B:1E:56"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "appVersion": "3"
+}

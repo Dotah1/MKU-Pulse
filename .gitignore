@@ -30,3 +30,18 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# TWA signing material and local Android build outputs
+twa/keystore/*.keystore
+twa/keystore/*-password.txt
+twa/.gradle/
+twa/build/
+twa/app/build/
+twa/*.apk
+twa/*.aab
+
+# Local handoff archive
+mku-pulse-twa-project.zip
+
+# Android signing sidecars
+twa/*.idsig
