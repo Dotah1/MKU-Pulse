@@ -26,6 +26,7 @@ import {
   TIER_LIMITS,
   YEAR_OPTIONS,
   daysLeft,
+  passwordProblem,
   sanitizeText,
   type Gender,
   type Tier,
@@ -74,6 +75,10 @@ function ProfilePage() {
   const [pulseStreak, setPulseStreak] = useState<number | null>(null);
   const [oneSignalBroadcastEnabled, setOneSignalBroadcastEnabled] = useState(false);
   const [oneSignalBroadcastBusy, setOneSignalBroadcastBusy] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
 
   const addOwnInterest = () => {
     const value = sanitizeText(ownInterest, 30).trim();
@@ -242,6 +247,53 @@ function ProfilePage() {
       );
     } finally {
       setOneSignalBroadcastBusy(false);
+    }
+  };
+
+  const changePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.email) {
+      toast.error("Could not identify your account. Please sign in again.");
+      return;
+    }
+    const passwordError = passwordProblem(newPassword);
+    if (passwordError) {
+      toast.error(passwordError);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("New passwords do not match");
+      return;
+    }
+    if (currentPassword === newPassword) {
+      toast.error("Choose a new password different from your current password");
+      return;
+    }
+
+    setPasswordBusy(true);
+    try {
+      const { error: verificationError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+      if (verificationError) {
+        toast.error("Current password is incorrect");
+        return;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) {
+        toast.error(updateError.message);
+        return;
+      }
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Password changed successfully");
+    } catch {
+      toast.error("Could not change your password. Please try again.");
+    } finally {
+      setPasswordBusy(false);
     }
   };
 
@@ -481,6 +533,60 @@ function ProfilePage() {
         </label>
       </section>
 
+      <section className="space-y-4 rounded-2xl border border-border bg-card p-5">
+        <div>
+          <h2 className="font-display text-lg font-bold">Security</h2>
+          <p className="text-sm text-muted-foreground">
+            Enter your current password before choosing a new one.
+          </p>
+        </div>
+        <form onSubmit={changePassword} className="space-y-3">
+          <div>
+            <Label htmlFor="current-password">Current password</Label>
+            <Input
+              id="current-password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="mt-1 min-h-11"
+            />
+          </div>
+          <div>
+            <Label htmlFor="new-password">New password</Label>
+            <Input
+              id="new-password"
+              type="password"
+              autoComplete="new-password"
+              required
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="mt-1 min-h-11"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              8+ characters with an uppercase letter, a number and a special character
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="confirm-password">Confirm new password</Label>
+            <Input
+              id="confirm-password"
+              type="password"
+              autoComplete="new-password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="mt-1 min-h-11"
+            />
+          </div>
+          <Button type="submit" disabled={passwordBusy} className="min-h-11">
+            {passwordBusy && <Loader2 className="mr-2 size-4 animate-spin" />}
+            Change password
+          </Button>
+        </form>
+      </section>
+
       <Subscription currentTier={tier} />
     </div>
   );
@@ -587,7 +693,11 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
                     : "No video"}
                 </li>
                 <li>{l.swipesPerDay} swipes / day</li>
-                <li>{l.superLikesPerDay > 0 ? `${l.superLikesPerDay} super like${l.superLikesPerDay === 1 ? "" : "s"} / day` : "No super likes"}</li>
+                <li>
+                  {l.superLikesPerDay > 0
+                    ? `${l.superLikesPerDay} super like${l.superLikesPerDay === 1 ? "" : "s"} / day`
+                    : "No super likes"}
+                </li>
                 <li>Chat with matches</li>
               </ul>
             </div>
