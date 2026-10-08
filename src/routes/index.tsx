@@ -5,16 +5,18 @@ import { Button } from "@/components/ui/button";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "MKU Pulse — Meet, match & mentor on campus" },
+      { title: "MKU Pulse — The digital campus for MKU students" },
       {
         name: "description",
         content:
-          "Join your campus feed, match with students, find mentors and chat in real time. Gmail sign-up only.",
+          "Connect with fellow MKU students, find mentors, discover opportunities and stay on top of campus updates.",
       },
-      { property: "og:title", content: "MKU Pulse — Meet, match & mentor on campus" },
+      { property: "og:title", content: "MKU Pulse — The digital campus for MKU students" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       {
         property: "og:description",
-        content: "The campus social network: feed, matching, mentorship and real-time chat.",
+        content: "Connect, find mentors, discover opportunities and get campus updates — all in one app.",
       },
     ],
   }),
@@ -24,23 +26,23 @@ export const Route = createFileRoute("/")({
 const FEATURES = [
   {
     icon: Users,
-    title: "Campus feed",
-    body: "Share text, photos and short clips with your campus.",
+    title: "Campus updates",
+    body: "Announcements, polls, Soko listings, hostels and lost & found in one feed.",
   },
   {
     icon: Heart,
     title: "Connect",
-    body: "Swipe through real student profiles and match instantly.",
+    body: "Meet students across courses and years — with block and report built in.",
   },
   {
     icon: GraduationCap,
     title: "Mentorship",
-    body: "Free for everyone — find and book campus mentors.",
+    body: "Free for everyone — get guidance on academics, careers and campus life.",
   },
   {
     icon: MessageCircle,
     title: "Real-time chat",
-    body: "Typing indicators, read receipts and push alerts.",
+    body: "Chat in real time with matches, mentors and classmates.",
   },
 ];
 
@@ -60,14 +62,14 @@ function Landing() {
 
       <section className="mx-auto max-w-3xl px-4 pt-12 pb-16 text-center">
         <p className="mb-4 inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-          Built for university students
+          Made for Mount Kenya University students
         </p>
         <h1 className="font-display text-4xl font-bold leading-tight tracking-tight sm:text-6xl">
-          Your whole campus life, in one app.
+          The digital campus for MKU students.
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-base text-muted-foreground sm:text-lg">
-          A social feed, student matching, free mentorship and real-time messaging — all in MKU
-          Pulse.
+          Connect with comrades, find a mentor, discover hostels, gigs and deals, and never miss a
+          campus update.
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <Button asChild size="lg" className="min-h-12 px-8">
