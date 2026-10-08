@@ -41,6 +41,7 @@ import {
   clearOneSignalPromptSuppression,
 } from "@/lib/onesignal";
 import { checkAndUpdateStreak, checkInServerStreak } from "@/lib/campus-data";
+import { MkuVerifyCard } from "@/components/MkuVerifyCard";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({
@@ -334,6 +335,9 @@ function ProfilePage() {
             </section>
           );
         })()}
+      {profile && (
+        <MkuVerifyCard verified={Boolean((profile as { mku_verified?: boolean }).mku_verified)} />
+      )}
       <header className="flex items-center gap-4">
         <div className="relative">
           <UserAvatar
