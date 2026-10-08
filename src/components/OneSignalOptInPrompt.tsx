@@ -40,6 +40,7 @@ export function OneSignalOptInPrompt() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [targets, setTargets] = useState<PromptTargets>(NO_TARGETS);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     setOpen(false);
@@ -115,7 +116,7 @@ export function OneSignalOptInPrompt() {
       pauseTimer();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [userId, profileReady, profile?.id, notificationsEnabled]);
+  }, [userId, profileReady, profile?.id, notificationsEnabled, retryKey]);
 
   const decline = () => {
     if (userId) suppressOneSignalPrompt(userId);
@@ -129,6 +130,9 @@ export function OneSignalOptInPrompt() {
     // cooldown; the prompt will be eligible again when the app is reopened.
     setOpen(false);
     setTargets(NO_TARGETS);
+    // Restart the active timer so an accidental dismissal cannot suppress the
+    // prompt for the rest of the session.
+    setRetryKey((value) => value + 1);
   };
 
   const accept = async () => {

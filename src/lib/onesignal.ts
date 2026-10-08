@@ -33,7 +33,7 @@ const ONESIGNAL_SCRIPT_URL = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSD
 const ONESIGNAL_WORKER_PATH = "push/onesignal/OneSignalSDKWorker.js";
 const ONESIGNAL_WORKER_SCOPE = "/push/onesignal/";
 const OPT_IN_STORAGE_KEY = "mku-pulse-onesignal-broadcasts-enabled";
-const PROMPT_DISMISSED_KEY_PREFIX = "mku-pulse:onesignal-prompt-dismissed:v1:";
+const PROMPT_DISMISSED_KEY_PREFIX = "mku-pulse:onesignal-prompt-dismissed:v2:";
 const PROMPT_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 
 let sdkPromise: Promise<OneSignalWebSdk> | null = null;

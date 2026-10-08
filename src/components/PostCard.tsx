@@ -71,6 +71,12 @@ const POST_CATEGORY_RULES = [
     className:
       "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-900 dark:bg-purple-950/40 dark:text-purple-300",
   },
+  {
+    pattern: /#trending\b|\bviral\b/i,
+    label: "📈 Trending",
+    className:
+      "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300",
+  },
 ] as const;
 
 interface Comment {
@@ -288,7 +294,11 @@ export function PostCard({
   const authorPlan = TIER_LIMITS[author?.tier ?? "free"];
   const threads = comments.filter((c) => !c.parent_id);
   const repliesOf = (id: string) => comments.filter((c) => c.parent_id === id);
-  const category = POST_CATEGORY_RULES.find((rule) => rule.pattern.test(post.content));
+  // Announcements have their own visual identity; content heuristics such as
+  // the word "found" must not relabel them as Lost & Found.
+  const category = post.is_announcement
+    ? undefined
+    : POST_CATEGORY_RULES.find((rule) => rule.pattern.test(post.content));
   const price = post.content.match(/(?:KES|Ksh)\s*[\d,]+/i)?.[0];
   const priceLabel = price?.replace(/^(?:KES|Ksh)\s*/i, "KES ");
 

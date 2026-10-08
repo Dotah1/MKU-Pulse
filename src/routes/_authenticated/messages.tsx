@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Reply, Send, X } from "lucide-react";
+import { ArrowLeft, GraduationCap, Loader2, Reply, Send, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SafetyMenu } from "@/components/SafetyMenu";
 import { isBlockedWith } from "@/lib/blocks";
@@ -10,6 +10,7 @@ import { useCampus } from "@/hooks/useCampus";
 import { StoredImage, UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { sanitizeText, timeAgo } from "@/lib/campus";
 import { fetchProfiles, getOrCreateConversation, type MiniProfile } from "@/lib/campus-data";
 
@@ -112,6 +113,8 @@ function MessagesPage() {
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [people, setPeople] = useState<Record<string, MiniProfile>>({});
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [mentorConversationIds, setMentorConversationIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const loadedContext = useRef<string | null | undefined>(undefined);
 
@@ -123,7 +126,28 @@ function MessagesPage() {
       .order("last_message_at", { ascending: false });
     const rows = (data ?? []) as ConversationRow[];
     setConversations(rows);
-    setPeople(await fetchProfiles(rows.map((r) => (r.user_a === user.id ? r.user_b : r.user_a))));
+    const otherIds = rows.map((r) => (r.user_a === user.id ? r.user_b : r.user_a));
+    const [profiles, mentorResult, unreadResult] = await Promise.all([
+      fetchProfiles(otherIds),
+      otherIds.length > 0
+        ? supabase.from("mentors").select("user_id").in("user_id", otherIds)
+        : Promise.resolve({ data: [] as { user_id: string }[] }),
+      rows.length > 0
+        ? supabase.from("messages").select("conversation_id").in("conversation_id", rows.map((row) => row.id)).neq("sender_id", user.id).is("read_at", null)
+        : Promise.resolve({ data: [] as { conversation_id: string }[] }),
+    ]);
+    const counts: Record<string, number> = {};
+    for (const row of (unreadResult.data ?? []) as { conversation_id: string }[]) {
+      counts[row.conversation_id] = (counts[row.conversation_id] ?? 0) + 1;
+    }
+    setUnreadCounts(counts);
+    const mentorIds = new Set<string>();
+    for (const mentor of (mentorResult.data ?? []) as { user_id: string }[]) {
+      const conversation = rows.find((row) => (row.user_a === user.id ? row.user_b : row.user_a) === mentor.user_id);
+      if (conversation) mentorIds.add(conversation.id);
+    }
+    setMentorConversationIds(mentorIds);
+    setPeople(profiles);
     setLoading(false);
   }, [user]);
 
@@ -133,6 +157,28 @@ function MessagesPage() {
     loadedContext.current = context;
     if (!c || !conversations.some((conversation) => conversation.id === c)) void load();
   }, [c, conversations, load, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (c) setUnreadCounts((current) => ({ ...current, [c]: 0 }));
+  }, [c, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`inbox-${user.id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        const row = payload.new as { conversation_id?: string; sender_id?: string };
+        if (!row.conversation_id || row.sender_id === user.id) return;
+        setUnreadCounts((current) => ({
+          ...current,
+          [row.conversation_id as string]: (current[row.conversation_id as string] ?? 0) + 1,
+        }));
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, () => void load())
+      .subscribe();
+    return () => void supabase.removeChannel(channel);
+  }, [user?.id, load]);
 
   useEffect(() => {
     if (!user || !p || c) return;
@@ -228,8 +274,10 @@ function MessagesPage() {
           {conversations.map((conv) => {
             const otherId = conv.user_a === user?.id ? conv.user_b : conv.user_a;
             const p = people[otherId];
+            const unread = unreadCounts[conv.id] ?? 0;
+            const isMentorConversation = mentorConversationIds.has(conv.id);
             return (
-              <li key={conv.id} className="flex items-center gap-3 px-4 hover:bg-secondary">
+              <li key={conv.id} className={`flex items-center gap-3 border-l-4 px-4 hover:bg-secondary ${isMentorConversation ? "border-primary bg-primary/5" : unread > 0 ? "border-accent bg-accent/5" : "border-transparent"}`}>
                 <Link
                   to="/u/$id"
                   params={{ id: otherId }}
@@ -257,14 +305,18 @@ function MessagesPage() {
                   className="flex flex-1 items-center gap-3 py-3 text-left"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{p?.full_name ?? "Student"}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-semibold">{p?.full_name ?? "Student"}</p>
+                      {isMentorConversation && <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]"><GraduationCap className="size-3" aria-hidden="true" /> Mentor</Badge>}
+                    </div>
                     <p className="truncate text-xs text-muted-foreground">
                       {conv.last_message || "Say hello"}
                     </p>
                   </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {timeAgo(conv.last_message_at)}
-                  </span>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="text-xs text-muted-foreground">{timeAgo(conv.last_message_at)}</span>
+                    {unread > 0 && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-foreground">{unread > 99 ? "99+" : unread} unread</span>}
+                  </div>
                 </button>
               </li>
             );

@@ -41,6 +41,7 @@ const COMPOSER_CATEGORIES = [
   { id: "hostels", label: "🏠 Hostel", tag: "#HostelVibes" },
   { id: "lost-and-found", label: "🔍 Lost & Found", tag: "#LostAndFound" },
   { id: "confessions", label: "🤫 Confession", tag: "#Confessions" },
+  { id: "trending", label: "📈 Trending", tag: "#Trending" },
 ] as const;
 
 type ComposerCategory = (typeof COMPOSER_CATEGORIES)[number]["id"];
@@ -81,8 +82,12 @@ function saveRecentPostDraft(content: string) {
   }
 }
 
-function postMatchesFilter(content: string, filter: FeedFilter): boolean {
+function postMatchesFilter(
+  post: Pick<PostRow, "content" | "is_announcement">,
+  filter: FeedFilter,
+): boolean {
   if (filter === "all") return true;
+  if (post.is_announcement) return false;
   const patterns: Record<Exclude<FeedFilter, "all">, RegExp> = {
     soko: /#mkusoko\b|#soko\b|\bselling\b|\bfor sale\b|\bkes\s*\d+/i,
     hostels:
@@ -92,7 +97,7 @@ function postMatchesFilter(content: string, filter: FeedFilter): boolean {
     confessions: /#confessions?\b|\bconfession\b/i,
     trending: /#trending\b|\bviral\b/i,
   };
-  return patterns[filter].test(content);
+  return patterns[filter].test(post.content);
 }
 
 export const Route = createFileRoute("/_authenticated/feed")({
@@ -136,7 +141,7 @@ function FeedPage() {
   const hasLoadedFeed = useRef(false);
   const authors = usePostAuthors(posts);
   const filteredPosts = useMemo(
-    () => posts.filter((post) => postMatchesFilter(post.content, activeFilter)),
+    () => posts.filter((post) => postMatchesFilter(post, activeFilter)),
     [posts, activeFilter],
   );
 
