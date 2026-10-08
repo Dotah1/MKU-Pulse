@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TIER_LIMITS, sanitizeText, timeAgo, type Tier } from "@/lib/campus";
 import { fetchProfiles, type MiniProfile } from "@/lib/campus-data";
 import { uploadFile } from "@/lib/storage";
+import { AdminMkuVerify } from "@/components/AdminMkuVerify";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -890,7 +891,12 @@ function AdminPage() {
             <TabsTrigger value="reports">
               Reports ({reports.filter((r) => r.status === "pending").length})
             </TabsTrigger>
+            <TabsTrigger value="mku">MKU verify</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="mku">
+            <AdminMkuVerify />
+          </TabsContent>
 
           <TabsContent value="payments" className="space-y-3">
             {payments.length === 0 && (
