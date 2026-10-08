@@ -130,15 +130,22 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const form = await request.formData();
     const bucket = form.get("bucket");
     const file = form.get("file");
-    if (typeof bucket !== "string" || !ALLOWED_BUCKETS.has(bucket) || !(file instanceof File)) {
+    if (
+      typeof bucket !== "string" ||
+      !ALLOWED_BUCKETS.has(bucket) ||
+      !file ||
+      typeof file !== "object" ||
+      typeof (file as File).arrayBuffer !== "function"
+    ) {
       return json({ error: "Invalid upload" }, 400, origin);
     }
-    if (!file.size || file.size > MAX_UPLOAD_BYTES)
+    const uploadFile = file as File;
+    if (!uploadFile.size || uploadFile.size > MAX_UPLOAD_BYTES)
       return json({ error: "File is too large" }, 413, origin);
-    const key = `${bucket}/${userId}/${crypto.randomUUID()}.${extensionFor(file)}`;
-    await env.MEDIA.put(key, file.stream(), {
+    const key = `${bucket}/${userId}/${crypto.randomUUID()}.${extensionFor(uploadFile)}`;
+    await env.MEDIA.put(key, await uploadFile.arrayBuffer(), {
       httpMetadata: {
-        contentType: file.type || "application/octet-stream",
+        contentType: uploadFile.type || "application/octet-stream",
         cacheControl: "private, max-age=3600",
       },
       customMetadata: { ownerId: userId, bucket },
