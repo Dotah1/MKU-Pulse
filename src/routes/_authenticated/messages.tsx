@@ -175,10 +175,30 @@ function MessagesPage() {
           [row.conversation_id as string]: (current[row.conversation_id as string] ?? 0) + 1,
         }));
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, () => void load())
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "messages" },
+        (payload) => {
+          const row = payload.new as {
+            conversation_id?: string;
+            sender_id?: string;
+            read_at?: string | null;
+          };
+          if (!row.conversation_id || row.sender_id === user.id || !row.read_at) return;
+          setUnreadCounts((current) => {
+            const next = { ...current };
+            if (c === row.conversation_id) {
+              next[row.conversation_id] = 0;
+            } else {
+              next[row.conversation_id] = Math.max(0, (next[row.conversation_id] ?? 0) - 1);
+            }
+            return next;
+          });
+        },
+      )
       .subscribe();
     return () => void supabase.removeChannel(channel);
-  }, [user?.id, load]);
+  }, [user?.id, c]);
 
   useEffect(() => {
     if (!user || !p || c) return;
@@ -374,9 +394,9 @@ function ChatPane({
     void isBlockedWith(currentUserId, otherId).then(setChatBlocked);
   }, [currentUserId, otherId]);
 
-  const markConversationRead = useCallback(() => {
+  const markConversationRead = useCallback(async () => {
     if (!currentUserId) return;
-    void supabase
+    await supabase
       .from("messages")
       .update({ read_at: new Date().toISOString() })
       .eq("conversation_id", conversation.id)
@@ -435,7 +455,7 @@ function ChatPane({
     setHasOlderMessages(page.length > MESSAGE_PAGE_SIZE);
     setMessages(rows);
     setLoadedConversationId(conversation.id);
-    markConversationRead();
+    await markConversationRead();
     const postIds = [
       ...new Set(rows.map((message) => message.post_id).filter(Boolean)),
     ] as string[];
