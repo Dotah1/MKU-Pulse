@@ -336,6 +336,7 @@ export type Database = {
       mku_verification_codes: {
         Row: {
           attempts: number
+          code: string | null
           code_hash: string
           created_at: string
           email: string
@@ -344,6 +345,7 @@ export type Database = {
         }
         Insert: {
           attempts?: number
+          code?: string | null
           code_hash: string
           created_at?: string
           email: string
@@ -352,6 +354,7 @@ export type Database = {
         }
         Update: {
           attempts?: number
+          code?: string | null
           code_hash?: string
           created_at?: string
           email?: string
