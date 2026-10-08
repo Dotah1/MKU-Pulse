@@ -308,6 +308,32 @@ function ProfilePage() {
 
   return (
     <div className="space-y-6">
+      {profile &&
+        (() => {
+          const checks = [
+            ["Profile photo", Boolean(profile.avatar_url)],
+            ["Full name", Boolean(profile.full_name?.trim())],
+            ["Course", Boolean(profile.major?.trim())],
+            ["Bio", Boolean(profile.bio?.trim())],
+            ["Interests", (profile.interests ?? []).length > 0],
+            ["Gender", Boolean(profile.gender)],
+          ] as const;
+          const done = checks.filter(([, ok]) => ok).length;
+          const pct = Math.round((done / checks.length) * 100);
+          if (pct === 100) return null;
+          const missing = checks.filter(([, ok]) => !ok).map(([label]) => label);
+          return (
+            <section className="rounded-2xl border border-border bg-card p-4" aria-label="Profile completion">
+              <div className="flex items-center justify-between text-sm font-semibold">
+                <span>Profile {pct}% complete</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Add: {missing.join(", ")}</p>
+            </section>
+          );
+        })()}
       <header className="flex items-center gap-4">
         <div className="relative">
           <UserAvatar
