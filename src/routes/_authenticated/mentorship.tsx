@@ -250,21 +250,29 @@ function MentorshipPage() {
                     )}
                   </div>
                 </div>
-                <p className="mt-3 text-sm font-medium">{m.expertise}</p>
+                <p className="mt-3 break-words [overflow-wrap:anywhere] text-sm font-medium">
+                  {m.expertise}
+                </p>
                 {m.mentorship_areas.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {m.mentorship_areas.map((item) => (
-                      <Badge key={item} variant="outline" className="text-[10px]">
+                      <Badge
+                        key={item}
+                        variant="outline"
+                        className="max-w-full break-words text-[10px]"
+                      >
                         {item}
                       </Badge>
                     ))}
                   </div>
                 )}
-                <p className="mt-1 text-sm text-muted-foreground">{m.experience}</p>
+                <p className="mt-1 break-words [overflow-wrap:anywhere] text-sm text-muted-foreground">
+                  {m.experience}
+                </p>
                 <Badge variant="secondary" className="mt-2">
                   {m.availability || "Flexible"}
                 </Badge>
-                <div className="mt-4 flex gap-2">
+                <div className="mt-4 flex flex-wrap gap-2">
                   {m.user_id !== user?.id && (
                     <Button className="min-h-11 flex-1" onClick={() => void message(m.user_id)}>
                       <MessageCircle className="mr-2 size-4" aria-hidden="true" />
@@ -359,7 +367,7 @@ function MentorApplication({
       ) : (
         <form onSubmit={submit} className="mt-4 space-y-3">
           {existing?.status === "rejected" && (
-            <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            <p className="break-words [overflow-wrap:anywhere] rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
               Previous application declined{existing.admin_note ? `: ${existing.admin_note}` : ""}.
               You can apply again.
             </p>
@@ -391,7 +399,7 @@ function MentorApplication({
               {MENTORSHIP_AREAS.map((area) => (
                 <label
                   key={area}
-                  className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-xs hover:bg-secondary"
+                  className="flex min-h-10 min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-xs hover:bg-secondary"
                 >
                   <Checkbox
                     checked={areas.includes(area)}
@@ -403,7 +411,7 @@ function MentorApplication({
                       )
                     }
                   />
-                  {area}
+                  <span className="min-w-0 break-words [overflow-wrap:anywhere]">{area}</span>
                 </label>
               ))}
             </div>

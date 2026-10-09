@@ -206,11 +206,13 @@ function PublicProfilePage() {
             <UserAvatar path={null} name={profile.full_name} className="size-28" />
           )}
           <div className="min-w-0 flex-1 text-center sm:text-left">
-            <h1 className="font-display text-2xl font-bold">{profile.full_name}</h1>
+            <h1 className="break-words [overflow-wrap:anywhere] font-display text-2xl font-bold">
+              {profile.full_name}
+            </h1>
             {profile.mku_verified && (
               <Badge className="mt-1">✓ Verified MKU Student</Badge>
             )}
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 break-words [overflow-wrap:anywhere] text-sm text-muted-foreground">
               Year {profile.year_of_study} · {profile.major || "Student"}
             </p>
             <div className="mt-2 flex flex-wrap justify-center gap-2 sm:justify-start">
@@ -229,11 +231,17 @@ function PublicProfilePage() {
                 </Badge>
               )}
             </div>
-            {profile.bio && <p className="mt-3 text-sm">{profile.bio}</p>}
+            {profile.bio && (
+              <p className="mt-3 break-words [overflow-wrap:anywhere] text-sm">{profile.bio}</p>
+            )}
             {(profile.interests ?? []).length > 0 && (
               <div className="mt-3 flex flex-wrap justify-center gap-1 sm:justify-start">
                 {(profile.interests ?? []).map((i) => (
-                  <Badge key={i} variant="secondary">
+                  <Badge
+                    key={i}
+                    variant="secondary"
+                    className="max-w-full break-words [overflow-wrap:anywhere]"
+                  >
                     {i}
                   </Badge>
                 ))}
@@ -289,7 +297,7 @@ function PublicProfilePage() {
                 className="flex flex-col gap-3 rounded-xl border border-border p-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="line-clamp-3 whitespace-pre-wrap text-sm">
+                  <p className="line-clamp-3 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm">
                     {draft.content || "No text content was saved for this post."}
                   </p>
                   <time

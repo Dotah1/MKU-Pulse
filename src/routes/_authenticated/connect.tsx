@@ -484,13 +484,22 @@ function ConnectPage() {
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as ConnectTab)}>
         <TabsList className="grid h-auto w-full grid-cols-3">
-          <TabsTrigger value="discover" className="min-h-11">
+          <TabsTrigger
+            value="discover"
+            className="min-h-11 min-w-0 whitespace-normal px-1 text-center text-xs leading-tight sm:whitespace-nowrap sm:px-3 sm:text-sm"
+          >
             Discover
           </TabsTrigger>
-          <TabsTrigger value="matches" className="min-h-11">
+          <TabsTrigger
+            value="matches"
+            className="min-h-11 min-w-0 whitespace-normal px-1 text-center text-xs leading-tight sm:whitespace-nowrap sm:px-3 sm:text-sm"
+          >
             Matches
           </TabsTrigger>
-          <TabsTrigger value="history" className="min-h-11">
+          <TabsTrigger
+            value="history"
+            className="min-h-11 min-w-0 whitespace-normal px-1 text-center text-xs leading-tight sm:whitespace-nowrap sm:px-3 sm:text-sm"
+          >
             Swiped / Passed
           </TabsTrigger>
         </TabsList>

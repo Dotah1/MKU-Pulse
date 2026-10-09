@@ -399,7 +399,10 @@ function EventsPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {events.map((event) => (
-              <article key={event.id} className="space-y-3 rounded-2xl border border-border p-5">
+              <article
+                key={event.id}
+                className="min-w-0 space-y-3 rounded-2xl border border-border p-5"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                     {categoryLabel(event.category)}
@@ -410,7 +413,9 @@ function EventsPage() {
                       : ""}
                   </span>
                 </div>
-                <h3 className="font-display text-lg font-semibold">{event.title}</h3>
+                <h3 className="break-words [overflow-wrap:anywhere] font-display text-lg font-semibold">
+                  {event.title}
+                </h3>
                 {event.description && (
                   <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
                     {event.description}
@@ -426,7 +431,9 @@ function EventsPage() {
                   </p>
                   <p className="flex items-start gap-2">
                     <MapPin className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-                    <span className="break-words">{event.location}</span>
+                    <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+                      {event.location}
+                    </span>
                   </p>
                 </div>
               </article>

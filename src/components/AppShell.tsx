@@ -76,7 +76,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="ml-auto flex items-center gap-2">
             {freeAccessMode && (
-              <Badge className="bg-success text-success-foreground">Free access on</Badge>
+              <Badge className="bg-success text-success-foreground">
+                <span className="hidden sm:inline">Free access on</span>
+                <span className="sm:hidden">Free</span>
+              </Badge>
             )}
             <Badge variant="outline" className="capitalize">
               {tier}

@@ -318,7 +318,7 @@ export function PostCard({
               {commentAuthors[c.user_id]?.full_name ?? "Student"}
             </p>
           </Link>
-          <p className="text-sm">{c.content}</p>
+          <p className="break-words [overflow-wrap:anywhere] text-sm">{c.content}</p>
         </div>
         <button
           type="button"
@@ -358,7 +358,7 @@ export function PostCard({
               <span className="hidden sm:inline">{authorPlan.label}</span>
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="break-words [overflow-wrap:anywhere] text-xs text-muted-foreground">
             {author ? `Year ${author.year_of_study} · ${author.major || "Student"} · ` : ""}
             {timeAgo(post.created_at)}
           </p>
@@ -385,7 +385,11 @@ export function PostCard({
         </div>
       )}
 
-      {post.content && <p className="mt-3 whitespace-pre-wrap text-sm">{post.content}</p>}
+      {post.content && (
+        <p className="mt-3 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm">
+          {post.content}
+        </p>
+      )}
       {isNearViewport && post.image_url && (
         <StoredImage
           path={post.image_url}
@@ -520,7 +524,7 @@ export function PostCard({
               rows={1}
               maxLength={500}
               aria-label={replyTo ? "Write a reply" : "Write a comment"}
-              className="min-h-11 resize-none"
+              className="min-h-11 min-w-0 flex-1 resize-none"
             />
             <Button onClick={addComment} className="min-h-11" aria-label="Send comment">
               <Send className="size-4" aria-hidden="true" />

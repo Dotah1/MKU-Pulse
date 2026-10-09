@@ -846,9 +846,11 @@ function ChatPane({
         </Link>
         <div className="min-w-0 flex-1">
           <Link to="/u/$id" params={{ id: otherId }}>
-            <p className="text-sm font-semibold hover:underline">{other?.full_name ?? "Student"}</p>
+            <p className="truncate text-sm font-semibold hover:underline">
+              {other?.full_name ?? "Student"}
+            </p>
           </Link>
-          <p className="text-xs text-muted-foreground">
+          <p className="truncate text-xs text-muted-foreground">
             {otherTyping ? "typing…" : other?.major || "MKU Pulse"}
           </p>
         </div>
@@ -904,7 +906,7 @@ function ChatPane({
                 </button>
               )}
               <div
-                className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                className={`min-w-0 max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
                   mine
                     ? "bg-primary text-primary-foreground"
                     : "bg-secondary text-secondary-foreground"
@@ -929,7 +931,9 @@ function ChatPane({
                     label="Referenced post"
                   />
                 )}
-                <p className="whitespace-pre-wrap">{m.content}</p>
+                <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                  {m.content}
+                </p>
                 <p
                   className={`mt-1 text-[10px] ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
                 >
@@ -1024,7 +1028,7 @@ function ChatPane({
           maxLength={2000}
           placeholder={`Message ${other?.full_name?.split(" ")[0] ?? "student"}…`}
           aria-label="Message"
-          className="min-h-11 resize-none"
+          className="min-h-11 min-w-0 flex-1 resize-none"
         />
         <Button
           onClick={() => void send()}
