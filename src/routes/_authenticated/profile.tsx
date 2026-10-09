@@ -308,7 +308,7 @@ function ProfilePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       {profile &&
         (() => {
           const checks = [
@@ -338,8 +338,8 @@ function ProfilePage() {
       {profile && (
         <MkuVerifyCard verified={Boolean((profile as { mku_verified?: boolean }).mku_verified)} />
       )}
-      <header className="flex items-center gap-4">
-        <div className="relative">
+      <header className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 sm:flex sm:gap-4">
+        <div className="relative shrink-0">
           <UserAvatar
             path={profile?.avatar_url}
             name={profile?.full_name ?? "You"}
@@ -369,11 +369,11 @@ function ProfilePage() {
             }}
           />
         </div>
-        <div>
-          <h1 className="font-display text-2xl font-bold">
+        <div className="min-w-0">
+          <h1 className="break-words font-display text-2xl font-bold">
             {profile?.full_name || "Your profile"}
           </h1>
-          <p className="text-sm text-muted-foreground">{user?.email}</p>
+          <p className="break-all text-sm text-muted-foreground">{user?.email}</p>
           <div className="mt-1 flex flex-wrap gap-2">
             <Badge variant="outline" className="capitalize">
               {limits.label} plan
@@ -384,7 +384,11 @@ function ProfilePage() {
             )}
           </div>
         </div>
-        <Button variant="ghost" className="ml-auto min-h-11" onClick={() => void handleSignOut()}>
+        <Button
+          variant="ghost"
+          className="col-span-2 ml-auto min-h-11 shrink-0 sm:col-span-1"
+          onClick={() => void handleSignOut()}
+        >
           <LogOut className="mr-2 size-4" aria-hidden="true" />
           Sign out
         </Button>
@@ -489,7 +493,7 @@ function ProfilePage() {
               );
             })}
           </div>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex min-w-0 gap-2">
             <Input
               id="p-own-interest"
               value={ownInterest}
@@ -503,9 +507,14 @@ function ProfilePage() {
               maxLength={30}
               placeholder="Add your own interest"
               aria-label="Add your own interest"
-              className="min-h-11"
+              className="min-h-11 min-w-0 flex-1"
             />
-            <Button type="button" variant="outline" className="min-h-11" onClick={addOwnInterest}>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 shrink-0"
+              onClick={addOwnInterest}
+            >
               Add
             </Button>
           </div>
@@ -687,7 +696,7 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
   };
 
   return (
-    <section className="space-y-4 rounded-2xl border border-border bg-card p-5">
+    <section className="min-w-0 space-y-4 rounded-2xl border border-border bg-card p-5">
       <div>
         <h2 className="font-display text-lg font-bold">Your plan</h2>
         <p className="text-sm text-muted-foreground">
@@ -784,20 +793,20 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
           {requests.map((r) => (
             <li
               key={r.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm"
+              className="flex min-w-0 flex-col gap-2 rounded-lg border border-border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
             >
-              <span>
+              <span className="min-w-0 break-words">
                 {TIER_LIMITS[r.tier].label} · KES {r.amount} · {r.mpesa_code}
                 {r.admin_note ? ` — ${r.admin_note}` : ""}
               </span>
               <Badge
-                className={
+                className={`shrink-0 ${
                   r.status === "approved"
                     ? "bg-success text-success-foreground"
                     : r.status === "rejected"
                       ? "bg-destructive text-destructive-foreground"
                       : ""
-                }
+                }`}
                 variant={r.status === "pending" ? "secondary" : "default"}
               >
                 {r.status}

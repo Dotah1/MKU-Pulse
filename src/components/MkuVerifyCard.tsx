@@ -43,21 +43,24 @@ export function MkuVerifyCard({ verified }: { verified: boolean }) {
         <p className="text-xs text-muted-foreground">Prove you're an MKU student with your school email.</p>
       </div>
       {!code ? (
-        <div className="flex gap-2">
+        <div className="flex min-w-0 gap-2">
           <Input
             type="email"
             placeholder="you@mylife.mku.ac.ke"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            className="min-w-0 flex-1"
           />
-          <Button onClick={get} disabled={busy || !email}>
+          <Button className="min-h-11 shrink-0" onClick={get} disabled={busy || !email}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : "Get code"}
           </Button>
         </div>
       ) : (
         <div className="space-y-2 text-sm">
           <div className="flex items-center justify-between rounded-xl bg-secondary px-3 py-2">
-            <span className="font-mono text-lg font-bold tracking-widest">{code}</span>
+            <span className="min-w-0 break-words font-mono text-lg font-bold tracking-widest">
+              {code}
+            </span>
             <Button
               size="icon"
               variant="ghost"
@@ -67,7 +70,7 @@ export function MkuVerifyCard({ verified }: { verified: boolean }) {
               <Copy className="size-4" />
             </Button>
           </div>
-          <p className="text-muted-foreground">
+          <p className="break-words text-muted-foreground">
             From <b>{email}</b>, send this code to <b>{MKU_INBOX}</b> (put it in the subject). We'll verify
             you within a day. The code works for 7 days and only for your account.
           </p>
