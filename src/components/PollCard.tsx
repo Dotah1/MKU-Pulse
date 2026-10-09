@@ -71,7 +71,7 @@ export function PollCard({
     setCounts(map);
     setTotal(sum);
     setMyOption((mine as { option_id: string } | null)?.option_id ?? null);
-  }, [poll.id, user?.id]);
+  }, [poll.id, user]);
 
   const scheduleLoad = useCallback(() => {
     if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);

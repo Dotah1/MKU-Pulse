@@ -204,11 +204,11 @@ function EventsPage() {
     try {
       const { error } = await supabase.rpc("create_campus_event", {
         p_title: title,
-        p_description: description || null,
+        p_description: (description || null) as unknown as string,
         p_category: form.category,
         p_location: location,
         p_starts_at: startsAt.toISOString(),
-        p_ends_at: endsAt?.toISOString() ?? null,
+        p_ends_at: (endsAt?.toISOString() ?? null) as unknown as string,
       });
       if (error) throw error;
       toast.success("Your campus event is published.");

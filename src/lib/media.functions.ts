@@ -33,7 +33,7 @@ async function deleteMediaPaths(paths: string[]) {
  */
 export const deletePostWithMedia = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data) => z.object({ postId: z.string().uuid() }).parse(data))
+  .validator((data) => z.object({ postId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: post, error } = await supabaseAdmin
@@ -63,7 +63,7 @@ export const deletePostWithMedia = createServerFn({ method: "POST" })
 /** Delete a poll (admins only) and remove its picture from storage. */
 export const deletePollWithMedia = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data) => z.object({ pollId: z.string().uuid() }).parse(data))
+  .validator((data) => z.object({ pollId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { data: isAdmin, error: roleError } = await context.supabase.rpc("has_role", {
       _user_id: context.userId,

@@ -34,7 +34,7 @@ export const getFirebaseWebConfig = createServerFn({ method: "GET" }).handler(
 /** Saves (or refreshes) the caller's FCM device token. */
 export const registerDeviceToken = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { token: string; platform?: string; expectedUserId: string }) => {
+  .validator((input: { token: string; platform?: string; expectedUserId: string }) => {
     const token = String(input?.token ?? "").trim();
     if (token.length < 20 || token.length > 4096) throw new Error("Invalid device token");
     const platform = input?.platform === "android" ? "android" : "web";
@@ -64,7 +64,7 @@ export const registerDeviceToken = createServerFn({ method: "POST" })
 /** Removes a device token (sign-out or notifications turned off). */
 export const unregisterDeviceToken = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { token: string; expectedUserId: string }) => {
+  .validator((input: { token: string; expectedUserId: string }) => {
     const token = String(input?.token ?? "").trim();
     const expectedUserId = String(input?.expectedUserId ?? "").trim();
     if (!expectedUserId) throw new Error("Expected account is required for push cleanup");
