@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedConnectRouteImport } from './routes/_authenticated/connect'
+import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated/events'
 import { Route as AuthenticatedFeedRouteImport } from './routes/_authenticated/feed'
 import { Route as AuthenticatedMentorshipRouteImport } from './routes/_authenticated/mentorship'
 import { Route as AuthenticatedMessagesRouteImport } from './routes/_authenticated/messages'
@@ -51,6 +52,11 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
 const AuthenticatedConnectRoute = AuthenticatedConnectRouteImport.update({
   id: '/connect',
   path: '/connect',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedEventsRoute = AuthenticatedEventsRouteImport.update({
+  id: '/events',
+  path: '/events',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedFeedRoute = AuthenticatedFeedRouteImport.update({
@@ -102,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/connect': typeof AuthenticatedConnectRoute
+  '/events': typeof AuthenticatedEventsRoute
   '/feed': typeof AuthenticatedFeedRoute
   '/mentorship': typeof AuthenticatedMentorshipRoute
   '/messages': typeof AuthenticatedMessagesRoute
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/connect': typeof AuthenticatedConnectRoute
+  '/events': typeof AuthenticatedEventsRoute
   '/feed': typeof AuthenticatedFeedRoute
   '/mentorship': typeof AuthenticatedMentorshipRoute
   '/messages': typeof AuthenticatedMessagesRoute
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/connect': typeof AuthenticatedConnectRoute
+  '/_authenticated/events': typeof AuthenticatedEventsRoute
   '/_authenticated/feed': typeof AuthenticatedFeedRoute
   '/_authenticated/mentorship': typeof AuthenticatedMentorshipRoute
   '/_authenticated/messages': typeof AuthenticatedMessagesRoute
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/admin'
     | '/connect'
+    | '/events'
     | '/feed'
     | '/mentorship'
     | '/messages'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/admin'
     | '/connect'
+    | '/events'
     | '/feed'
     | '/mentorship'
     | '/messages'
@@ -182,6 +193,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/admin'
     | '/_authenticated/connect'
+    | '/_authenticated/events'
     | '/_authenticated/feed'
     | '/_authenticated/mentorship'
     | '/_authenticated/messages'
@@ -242,6 +254,13 @@ declare module '@tanstack/react-router' {
       path: '/connect'
       fullPath: '/connect'
       preLoaderRoute: typeof AuthenticatedConnectRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/events': {
+      id: '/_authenticated/events'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof AuthenticatedEventsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/feed': {
@@ -306,6 +325,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
   AuthenticatedConnectRoute: typeof AuthenticatedConnectRoute
+  AuthenticatedEventsRoute: typeof AuthenticatedEventsRoute
   AuthenticatedFeedRoute: typeof AuthenticatedFeedRoute
   AuthenticatedMentorshipRoute: typeof AuthenticatedMentorshipRoute
   AuthenticatedMessagesRoute: typeof AuthenticatedMessagesRoute
@@ -318,6 +338,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRoute,
   AuthenticatedConnectRoute: AuthenticatedConnectRoute,
+  AuthenticatedEventsRoute: AuthenticatedEventsRoute,
   AuthenticatedFeedRoute: AuthenticatedFeedRoute,
   AuthenticatedMentorshipRoute: AuthenticatedMentorshipRoute,
   AuthenticatedMessagesRoute: AuthenticatedMessagesRoute,

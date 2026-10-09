@@ -1,5 +1,13 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Home, Heart, GraduationCap, MessageCircle, User, Shield } from "lucide-react";
+import {
+  CalendarDays,
+  Home,
+  Heart,
+  GraduationCap,
+  MessageCircle,
+  User,
+  Shield,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useCampus } from "@/hooks/useCampus";
 import { UserAvatar } from "@/components/StoredMedia";
@@ -12,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/feed", label: "Feed", icon: Home },
+  { to: "/events", label: "Events", icon: CalendarDays },
   { to: "/connect", label: "Connect", icon: Heart },
   { to: "/mentorship", label: "Mentors", icon: GraduationCap },
   { to: "/messages", label: "Messages", icon: MessageCircle },
