@@ -214,17 +214,17 @@ function SignupForm() {
         unknown
       > | null;
       if (!draft) return;
-      if (typeof draft.step === "number") setStep(Math.min(5, Math.max(1, draft.step)));
-      if (typeof draft.fullName === "string") setFullName(draft.fullName);
-      if (typeof draft.email === "string") setEmail(draft.email);
-      if (typeof draft.phone === "string") setPhone(draft.phone);
-      if (typeof draft.year === "string") setYear(draft.year);
-      if (draft.gender === "male" || draft.gender === "female") setGender(draft.gender);
-      if (typeof draft.major === "string") setMajor(draft.major);
-      if (typeof draft.institutionalEmail === "string")
-        setInstitutionalEmail(draft.institutionalEmail);
-      if (Array.isArray(draft.interests))
-        setInterests(draft.interests.filter((i): i is string => typeof i === "string"));
+      if (typeof draft['step'] === "number") setStep(Math.min(5, Math.max(1, draft['step'])));
+      if (typeof draft['fullName'] === "string") setFullName(draft['fullName']);
+      if (typeof draft['email'] === "string") setEmail(draft['email']);
+      if (typeof draft['phone'] === "string") setPhone(draft['phone']);
+      if (typeof draft['year'] === "string") setYear(draft['year']);
+      if (draft['gender'] === "male" || draft['gender'] === "female") setGender(draft['gender']);
+      if (typeof draft['major'] === "string") setMajor(draft['major']);
+      if (typeof draft['institutionalEmail'] === "string")
+        setInstitutionalEmail(draft['institutionalEmail']);
+      if (Array.isArray(draft['interests']))
+        setInterests(draft['interests'].filter((i): i is string => typeof i === "string"));
     } catch {
       window.localStorage.removeItem(DRAFT_KEY);
     }
@@ -437,8 +437,8 @@ function SignupForm() {
             </p>
           </div>
           <p className="text-xs text-muted-foreground">
-            You will still need to confirm your Gmail account if Supabase requests email
-            confirmation.
+            If you receive a confirmation email, open your Gmail inbox and follow the link to
+            activate your account.
           </p>
         </>
       )}

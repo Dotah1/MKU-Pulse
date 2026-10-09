@@ -200,13 +200,13 @@ function ProfilePage() {
     if (key === "notifications_enabled" && value) {
       const consented = await requestPushConsent(user.id);
       if (!consented) {
-        toast.error("Allow notifications in your browser or app settings to get pushes");
+        toast.error("Allow notifications in your browser or app settings to receive alerts.");
         return;
       }
     }
     if (key === "notifications_enabled" && !value) {
       if (!(await disablePush(user.id))) {
-        toast.error("Could not remove this device's push token. Please try again while online.");
+        toast.error("Could not turn off alerts on this device. Check your connection and try again.");
         return;
       }
       revokePushConsent(user.id);
@@ -537,8 +537,7 @@ function ProfilePage() {
           <span>
             Campus broadcast alerts
             <span className="block text-xs text-muted-foreground">
-              Optional OneSignal campaigns from MKU Pulse; this device subscribes only after you opt
-              in.
+              Campus news and announcements on this device, only when you choose to allow them.
             </span>
           </span>
           <Switch
@@ -552,7 +551,7 @@ function ProfilePage() {
           <span>
             Private profile
             <span className="block text-xs text-muted-foreground">
-              Hide me from the Connect deck
+              Hide my profile from new people in Connect
             </span>
           </span>
           <Switch
