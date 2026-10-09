@@ -37,10 +37,15 @@ export function MkuVerifyCard({ verified }: { verified: boolean }) {
     : "#";
 
   return (
-    <section className="space-y-3 rounded-2xl border border-border bg-card p-4" aria-label="MKU verification">
+    <section
+      className="space-y-3 rounded-2xl border border-border bg-card p-4"
+      aria-label="MKU verification"
+    >
       <div>
         <h2 className="font-semibold">Get the Verified MKU Student badge</h2>
-        <p className="text-xs text-muted-foreground">Prove you're an MKU student with your school email.</p>
+        <p className="text-xs text-muted-foreground">
+          Prove you're an MKU student with your school email.
+        </p>
       </div>
       {!code ? (
         <div className="flex min-w-0 gap-2">
@@ -65,14 +70,16 @@ export function MkuVerifyCard({ verified }: { verified: boolean }) {
               size="icon"
               variant="ghost"
               aria-label="Copy code"
-              onClick={() => void navigator.clipboard.writeText(code).then(() => toast.success("Copied"))}
+              onClick={() =>
+                void navigator.clipboard.writeText(code).then(() => toast.success("Copied"))
+              }
             >
               <Copy className="size-4" />
             </Button>
           </div>
           <p className="break-words text-muted-foreground">
-            From <b>{email}</b>, send this code to <b>{MKU_INBOX}</b> (put it in the subject). We'll verify
-            you within a day. The code works for 7 days and only for your account.
+            From <b>{email}</b>, send this code to <b>{MKU_INBOX}</b> (put it in the subject). We'll
+            verify you within a day. The code works for 7 days and only for your account.
           </p>
           <Button asChild className="w-full">
             <a href={mailto}>Open email app</a>

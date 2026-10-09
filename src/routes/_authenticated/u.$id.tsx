@@ -209,9 +209,7 @@ function PublicProfilePage() {
             <h1 className="break-words [overflow-wrap:anywhere] font-display text-2xl font-bold">
               {profile.full_name}
             </h1>
-            {profile.mku_verified && (
-              <Badge className="mt-1">✓ Verified MKU Student</Badge>
-            )}
+            {profile.mku_verified && <Badge className="mt-1">✓ Verified MKU Student</Badge>}
             <p className="mt-1 break-words [overflow-wrap:anywhere] text-sm text-muted-foreground">
               Year {profile.year_of_study} · {profile.major || "Student"}
             </p>

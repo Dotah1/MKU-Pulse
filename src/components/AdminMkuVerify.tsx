@@ -29,7 +29,8 @@ export function AdminMkuVerify() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Open {MKU_INBOX}, check the sender is the same @mylife.mku.ac.ke address shown below, then approve.
+        Open {MKU_INBOX}, check the sender is the same @mylife.mku.ac.ke address shown below, then
+        approve.
       </p>
       <div className="flex gap-2">
         <Input
@@ -40,7 +41,10 @@ export function AdminMkuVerify() {
             setMatch(null);
           }}
         />
-        <Button disabled={busy || !code} onClick={() => run(async () => setMatch(await lookup({ data: { code } })))}>
+        <Button
+          disabled={busy || !code}
+          onClick={() => run(async () => setMatch(await lookup({ data: { code } })))}
+        >
           {busy ? <Loader2 className="size-4 animate-spin" /> : "Find"}
         </Button>
       </div>

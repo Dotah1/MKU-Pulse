@@ -206,7 +206,9 @@ function ProfilePage() {
     }
     if (key === "notifications_enabled" && !value) {
       if (!(await disablePush(user.id))) {
-        toast.error("Could not turn off alerts on this device. Check your connection and try again.");
+        toast.error(
+          "Could not turn off alerts on this device. Check your connection and try again.",
+        );
         return;
       }
       revokePushConsent(user.id);
@@ -324,7 +326,10 @@ function ProfilePage() {
           if (pct === 100) return null;
           const missing = checks.filter(([, ok]) => !ok).map(([label]) => label);
           return (
-            <section className="rounded-2xl border border-border bg-card p-4" aria-label="Profile completion">
+            <section
+              className="rounded-2xl border border-border bg-card p-4"
+              aria-label="Profile completion"
+            >
               <div className="flex items-center justify-between text-sm font-semibold">
                 <span>Profile {pct}% complete</span>
               </div>
@@ -745,9 +750,8 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
 
       <form onSubmit={submit} className="space-y-3 rounded-xl bg-secondary/60 p-4">
         <p className="text-sm">
-          Send your payment to{" "}
-          <span className="break-all font-semibold">{paymentInfo.number}</span> via M-Pesa, then
-          paste the transaction code below for manual approval.
+          Send your payment to <span className="break-all font-semibold">{paymentInfo.number}</span>{" "}
+          via M-Pesa, then paste the transaction code below for manual approval.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
           <div>

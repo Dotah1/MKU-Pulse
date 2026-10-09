@@ -4,6 +4,18 @@ export type Tier = "free" | "mid" | "full";
 
 export type Gender = "male" | "female";
 
+export interface PaymentInfo {
+  number: string;
+  mid_price: number;
+  full_price: number;
+}
+
+export const DEFAULT_PAYMENT_INFO: PaymentInfo = {
+  number: "0713249119",
+  mid_price: 150,
+  full_price: 300,
+};
+
 export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: "male", label: "Male" },
   { value: "female", label: "Female" },

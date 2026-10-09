@@ -50,5 +50,12 @@ export default tseslint.config(
       "react-refresh/only-export-components": "off",
     },
   },
+  {
+    files: ["src/hooks/useNotifications.tsx"],
+    rules: {
+      // This module intentionally exports a custom hook and type-only notifications.
+      "react-refresh/only-export-components": "off",
+    },
+  },
   eslintPluginPrettier,
 );
