@@ -95,6 +95,50 @@ export type Database = {
         }
         Relationships: []
       }
+      campus_events: {
+        Row: {
+          category: string
+          created_at: string
+          creator_id: string
+          description: string | null
+          ends_at: string | null
+          id: string
+          location: string
+          starts_at: string
+          title: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          creator_id: string
+          description?: string | null
+          ends_at?: string | null
+          id?: string
+          location: string
+          starts_at: string
+          title: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          creator_id?: string
+          description?: string | null
+          ends_at?: string | null
+          id?: string
+          location?: string
+          starts_at?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campus_events_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           created_at: string
@@ -895,6 +939,17 @@ export type Database = {
       blocked_user_ids: { Args: never; Returns: string[] }
       check_in_streak: { Args: { _today: string }; Returns: number }
       conversation_blocked: { Args: { _conv: string }; Returns: boolean }
+      create_campus_event: {
+        Args: {
+          p_category: string
+          p_description: string | null
+          p_ends_at: string | null
+          p_location: string
+          p_starts_at: string
+          p_title: string
+        }
+        Returns: Database["public"]["Tables"]["campus_events"]["Row"]
+      }
       delete_expired_posts: { Args: never; Returns: number }
       effective_tier: {
         Args: { _user_id: string }
