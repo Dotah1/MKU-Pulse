@@ -960,6 +960,17 @@ function ChatPane({
         )}
       </header>
 
+      <div
+        role="note"
+        aria-label="Message retention policy"
+        className="shrink-0 border-b border-border bg-muted/40 px-4 py-2 text-xs leading-relaxed text-muted-foreground"
+      >
+        Messages older than 90 days are deleted only when both participants are on the free plan.
+        Shared history is kept while either participant has an active paid plan and for 30 days
+        after the last paid plan expires. Messages linked to pending or approved safety reports are
+        retained.
+      </div>
+
       <div ref={messageList} className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
         {hasOlderMessages && (
           <div className="flex justify-center pb-2">
