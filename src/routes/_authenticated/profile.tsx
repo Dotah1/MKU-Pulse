@@ -96,11 +96,20 @@ function ProfilePage() {
     if (!profile) return;
     setFullName(profile.full_name);
     setMajor(profile.major);
-    setYear(String(profile.year_of_study ?? 1));
-    setGender(profile.gender ?? "");
+    const profileYear = Number(profile.year_of_study);
+    const metadataYear = Number(user?.user_metadata?.["year_of_study"]);
+    const isValidYear = (value: number) => Number.isInteger(value) && value >= 1 && value <= 6;
+    setYear(
+      String(isValidYear(profileYear) ? profileYear : isValidYear(metadataYear) ? metadataYear : 1),
+    );
+    const metadataGender = user?.user_metadata?.["gender"];
+    setGender(
+      profile.gender ??
+        (metadataGender === "male" || metadataGender === "female" ? metadataGender : ""),
+    );
     setBio(profile.bio);
     setInterests(profile.interests ?? []);
-  }, [profile]);
+  }, [profile, user]);
 
   useEffect(() => {
     setPulseStreak(checkAndUpdateStreak());

@@ -32,7 +32,7 @@ interface CampusState {
   paymentInfo: PaymentInfo;
   tier: Tier;
   limits: TierLimits;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: (userId?: string) => Promise<void>;
   refreshSettings: () => Promise<void>;
   setFreeAccessModeLocal: (enabled: boolean) => void;
   setPaymentInfoLocal: (info: PaymentInfo) => void;
@@ -147,8 +147,9 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       paymentInfo,
       tier,
       limits: TIER_LIMITS[tier],
-      refreshProfile: async () => {
-        if (session?.user.id) await loadProfile(session.user.id);
+      refreshProfile: async (userId) => {
+        const id = userId ?? session?.user.id;
+        if (id) await loadProfile(id);
       },
       refreshSettings: loadSettings,
       setFreeAccessModeLocal: setFreeAccessMode,

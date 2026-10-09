@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "@/lib/toast";
 import { Loader2, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useCampus } from "@/hooks/useCampus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -178,6 +179,7 @@ function SigninForm() {
 function SignupForm() {
   const navigate = useNavigate();
   const requestVerificationCode = useServerFn(requestMkuCode);
+  const { refreshProfile } = useCampus();
   const DRAFT_KEY = "mku-pulse:onboarding-draft:v1";
   const INTERESTS = [
     "Academics",
@@ -359,7 +361,20 @@ function SignupForm() {
       return;
     }
     const uploaded = await uploadPendingAvatar(userId);
-    await supabase.from("profiles").update({ gender, interests }).eq("id", userId);
+    const { data: savedProfile, error: profileSaveError } = await supabase
+      .from("profiles")
+      .update({ year_of_study: Number(year), gender, interests })
+      .eq("id", userId)
+      .select("id")
+      .maybeSingle();
+    if (profileSaveError || !savedProfile) {
+      setBusy(false);
+      toast.error(
+        profileSaveError?.message ?? "Could not save your profile details. Please try again.",
+      );
+      return;
+    }
+    await refreshProfile(userId);
     if (institutionalEmail.trim() && data.session) {
       try {
         await requestVerificationCode({ data: { email: institutionalEmail.trim() } });
