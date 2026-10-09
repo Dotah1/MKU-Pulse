@@ -26,7 +26,7 @@ function NotificationsPage() {
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center gap-3">
+      <header className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="font-display text-2xl font-bold">Notifications</h1>
           <p className="text-sm text-muted-foreground">
@@ -34,7 +34,11 @@ function NotificationsPage() {
           </p>
         </div>
         {unreadCount > 0 && (
-          <Button variant="outline" className="ml-auto min-h-11" onClick={() => void markAllRead()}>
+          <Button
+            variant="outline"
+            className="min-h-11 sm:ml-auto"
+            onClick={() => void markAllRead()}
+          >
             Mark all as read
           </Button>
         )}
@@ -69,16 +73,20 @@ function NotificationsPage() {
                 className="block px-4 py-4 hover:bg-secondary"
               >
                 <div className="flex items-center gap-2">
-                  <p className="font-medium">{notification.title}</p>
+                  <p className="min-w-0 flex-1 break-words [overflow-wrap:anywhere] font-medium">
+                    {notification.title}
+                  </p>
                   {!notification.read_at && (
-                    <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
+                    <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
                   )}
-                  <span className="ml-auto text-xs text-muted-foreground">
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                     {timeAgo(notification.created_at)}
                   </span>
                 </div>
                 {notification.body && (
-                  <p className="mt-1 text-sm text-muted-foreground">{notification.body}</p>
+                  <p className="mt-1 break-words [overflow-wrap:anywhere] text-sm text-muted-foreground">
+                    {notification.body}
+                  </p>
                 )}
               </NotificationItemLink>
             </li>

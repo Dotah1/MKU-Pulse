@@ -114,7 +114,9 @@ export function AnnouncementOnOpen() {
       {announcement && (
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{announcement.title}</DialogTitle>
+            <DialogTitle className="break-words [overflow-wrap:anywhere]">
+              {announcement.title}
+            </DialogTitle>
             <DialogDescription className="whitespace-pre-wrap break-words">
               {announcement.body}
             </DialogDescription>

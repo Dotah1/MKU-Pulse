@@ -169,7 +169,7 @@ export function PollCard({
       id={`poll-${poll.id}`}
       className="scroll-mt-24 rounded-2xl border border-primary/40 bg-primary/5 p-4"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <BarChart3 className="size-4 text-primary" aria-hidden="true" />
         <Badge variant="secondary">Poll</Badge>
         {closed && <Badge variant="outline">Closed</Badge>}
@@ -189,7 +189,9 @@ export function PollCard({
           <Share2 className="mr-1 size-4 text-emerald-600" aria-hidden="true" />
           WhatsApp
         </Button>
-        <span className="ml-auto text-xs text-muted-foreground">{timeAgo(poll.created_at)}</span>
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+          {timeAgo(poll.created_at)}
+        </span>
         {isAdmin && (
           <Button
             variant="ghost"
@@ -202,7 +204,9 @@ export function PollCard({
           </Button>
         )}
       </div>
-      <h2 className="mt-2 font-display text-base font-semibold">{poll.question}</h2>
+      <h2 className="mt-2 break-words [overflow-wrap:anywhere] font-display text-base font-semibold">
+        {poll.question}
+      </h2>
       {hasBeenNearViewport && poll.image_url && (
         <StoredImage
           path={poll.image_url}

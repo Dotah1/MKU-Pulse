@@ -27,7 +27,7 @@ export function NotificationBell() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
+      <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)] p-0">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <p className="font-display text-sm font-semibold">Notifications</p>
           {unreadCount > 0 && (
@@ -50,9 +50,13 @@ export function NotificationBell() {
                 onNavigate={() => setOpen(false)}
                 className="block px-3 py-3 hover:bg-secondary"
               >
-                <p className="text-sm font-medium">{notification.title}</p>
+                <p className="min-w-0 break-words [overflow-wrap:anywhere] text-sm font-medium">
+                  {notification.title}
+                </p>
                 {notification.body && (
-                  <p className="text-xs text-muted-foreground">{notification.body}</p>
+                  <p className="break-words [overflow-wrap:anywhere] text-xs text-muted-foreground">
+                    {notification.body}
+                  </p>
                 )}
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   {timeAgo(notification.created_at)}

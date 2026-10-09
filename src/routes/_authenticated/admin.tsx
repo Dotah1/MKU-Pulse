@@ -509,8 +509,11 @@ function AdminPage() {
           { label: "Posts", value: stats.posts },
           { label: "Matches", value: stats.matches },
         ].map((s) => (
-          <div key={s.label} className="rounded-2xl border border-border bg-card p-4 text-center">
-            <p className="font-display text-2xl font-bold">{s.value}</p>
+          <div
+            key={s.label}
+            className="min-w-0 rounded-2xl border border-border bg-card p-4 text-center"
+          >
+            <p className="font-display text-2xl font-bold [overflow-wrap:anywhere]">{s.value}</p>
             <p className="text-xs text-muted-foreground">{s.label}</p>
           </div>
         ))}
@@ -728,7 +731,7 @@ function AdminPage() {
               type="file"
               accept="image/*"
               aria-label="Choose a poll image"
-              className="min-h-11 file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm"
+              className="min-h-11 min-w-0 flex-1 file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm"
               onChange={(event) => {
                 const file = event.currentTarget.files?.[0] ?? null;
                 event.currentTarget.value = "";
@@ -796,7 +799,7 @@ function AdminPage() {
             }}
             placeholder="Search by name"
             aria-label="Search members"
-            className="min-h-11"
+            className="min-h-11 min-w-0 flex-1"
           />
           <Button
             variant="outline"
@@ -889,7 +892,7 @@ function AdminPage() {
         <Loader2 className="mx-auto my-12 size-6 animate-spin text-muted-foreground" />
       ) : (
         <Tabs defaultValue="payments">
-          <TabsList>
+          <TabsList className="w-full max-w-full overflow-x-auto">
             <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
             <TabsTrigger value="mentors">Mentors ({apps.length})</TabsTrigger>
             <TabsTrigger value="reports">
@@ -922,7 +925,10 @@ function AdminPage() {
                       {TIER_LIMITS[row.tier].label} · KES {row.amount} · {timeAgo(row.created_at)}
                     </p>
                   </div>
-                  <Badge variant="secondary" className="ml-auto font-mono">
+                  <Badge
+                    variant="secondary"
+                    className="ml-auto max-w-[45%] min-w-0 break-all font-mono"
+                  >
                     {row.mpesa_code}
                   </Badge>
                 </div>
@@ -961,11 +967,17 @@ function AdminPage() {
                     <p className="text-sm font-semibold">
                       {people[row.user_id]?.full_name ?? "Student"}
                     </p>
-                    <p className="text-xs text-muted-foreground">{row.expertise}</p>
+                    <p className="break-words [overflow-wrap:anywhere] text-xs text-muted-foreground">
+                      {row.expertise}
+                    </p>
                   </div>
                 </div>
-                <p className="mt-2 text-sm">{row.experience}</p>
-                <p className="mt-1 text-xs text-muted-foreground">Available: {row.availability}</p>
+                <p className="mt-2 break-words [overflow-wrap:anywhere] text-sm">
+                  {row.experience}
+                </p>
+                <p className="mt-1 break-words [overflow-wrap:anywhere] text-xs text-muted-foreground">
+                  Available: {row.availability}
+                </p>
                 <div className="mt-3 flex gap-2">
                   <Button className="min-h-11" onClick={() => void decideMentor(row, true)}>
                     Approve
@@ -1000,7 +1012,7 @@ function AdminPage() {
                 <p className="text-xs text-muted-foreground">
                   by {people[row.reporter_id]?.full_name ?? "Student"} · {timeAgo(row.created_at)}
                 </p>
-                <p className="mt-2 text-sm">{row.reason}</p>
+                <p className="mt-2 break-words [overflow-wrap:anywhere] text-sm">{row.reason}</p>
                 {row.target_type === "post" && (
                   <Link
                     to="/p/$id"

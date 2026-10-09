@@ -482,7 +482,7 @@ function ProfilePage() {
                       on ? list.filter((x) => x !== i) : [...list, i].slice(0, 10),
                     )
                   }
-                  className={`min-h-11 rounded-full border px-3 text-sm ${
+                  className={`min-h-11 min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-full border px-3 text-sm ${
                     on
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border text-muted-foreground hover:bg-secondary"
@@ -745,8 +745,9 @@ function Subscription({ currentTier }: { currentTier: Tier }) {
 
       <form onSubmit={submit} className="space-y-3 rounded-xl bg-secondary/60 p-4">
         <p className="text-sm">
-          Send your payment to <span className="font-semibold">{paymentInfo.number}</span> via
-          M-Pesa, then paste the transaction code below for manual approval.
+          Send your payment to{" "}
+          <span className="break-all font-semibold">{paymentInfo.number}</span> via M-Pesa, then
+          paste the transaction code below for manual approval.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
           <div>

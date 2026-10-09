@@ -514,10 +514,10 @@ function SignupForm() {
             <Label htmlFor="su-photo">Profile picture</Label>
             <label
               htmlFor="su-photo"
-              className="mt-1 flex min-h-12 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
+              className="mt-1 flex min-h-12 min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
             >
-              <Upload className="size-4" aria-hidden="true" />
-              {photo ? photo.name : "Choose a photo"}
+              <Upload className="size-4 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 truncate">{photo ? photo.name : "Choose a photo"}</span>
             </label>
             <input
               id="su-photo"
@@ -549,13 +549,13 @@ function SignupForm() {
             {INTERESTS.map((interest) => (
               <label
                 key={interest}
-                className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm hover:bg-secondary"
+                className="flex min-h-11 min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm hover:bg-secondary"
               >
                 <Checkbox
                   checked={interests.includes(interest)}
                   onCheckedChange={() => toggleInterest(interest)}
                 />
-                {interest}
+                <span className="min-w-0 break-words [overflow-wrap:anywhere]">{interest}</span>
               </label>
             ))}
           </div>
@@ -582,7 +582,7 @@ function SignupForm() {
       )}
 
       {step === 5 && (
-        <div className="space-y-3 rounded-xl bg-secondary p-4 text-sm">
+        <div className="space-y-3 rounded-xl bg-secondary p-4 text-sm break-words [overflow-wrap:anywhere]">
           <p>
             <b>Name:</b> {fullName || "Not provided"}
           </p>
