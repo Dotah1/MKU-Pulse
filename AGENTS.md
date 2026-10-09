@@ -12,3 +12,4 @@
 - Subscription display metadata belongs in `TIER_LIMITS`; internal tier keys remain stable so labels and symbols can change without data migrations.
 - Blocking is enforced in the database (send/start-chat/swipe rules check `is_blocked_between`); the UI only hides blocked users, so never rely on client filtering alone.
 - `profiles.mku_verified` can only be set by the server-only `mark_mku_verified` function; the verified MKU email lives in private `profile_contacts`.
+- Import app alerts from `@/lib/toast` so diagnostic service/configuration errors are translated centrally while useful validation messages remain intact.

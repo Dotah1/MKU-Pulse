@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Ban, Flag, MoreVertical, UserMinus } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

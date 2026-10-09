@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { ArrowLeft, GraduationCap, Loader2, Reply, Send, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SafetyMenu } from "@/components/SafetyMenu";
@@ -185,12 +185,13 @@ function MessagesPage() {
             read_at?: string | null;
           };
           if (!row.conversation_id || row.sender_id === user.id || !row.read_at) return;
+          const conversationId = row.conversation_id;
           setUnreadCounts((current) => {
             const next = { ...current };
-            if (c === row.conversation_id) {
-              next[row.conversation_id] = 0;
+            if (c === conversationId) {
+              next[conversationId] = 0;
             } else {
-              next[row.conversation_id] = Math.max(0, (next[row.conversation_id] ?? 0) - 1);
+              next[conversationId] = Math.max(0, (next[conversationId] ?? 0) - 1);
             }
             return next;
           });
