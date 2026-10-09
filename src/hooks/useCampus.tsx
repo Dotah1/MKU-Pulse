@@ -12,25 +12,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { disablePush } from "@/lib/push";
 import {
   ADMIN_EMAIL,
+  DEFAULT_PAYMENT_INFO,
   TIER_LIMITS,
   effectiveTier,
   isExpired,
+  type PaymentInfo,
   type Profile,
   type Tier,
   type TierLimits,
 } from "@/lib/campus";
-
-export interface PaymentInfo {
-  number: string;
-  mid_price: number;
-  full_price: number;
-}
-
-export const DEFAULT_PAYMENT_INFO: PaymentInfo = {
-  number: "0713249119",
-  mid_price: 150,
-  full_price: 300,
-};
 
 interface CampusState {
   loading: boolean;

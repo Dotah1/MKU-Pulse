@@ -595,8 +595,8 @@ function AdminPage() {
         <h2 className="font-display text-base font-semibold">Show a message on next app open</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Students will see this announcement once when they next open MKU Pulse, as long as it
-          hasn't expired. It won't appear for the admin who sends it, and it won't send a phone
-          or browser notification.
+          hasn't expired. It won't appear for the admin who sends it, and it won't send a phone or
+          browser notification.
         </p>
         <div className="mt-3 space-y-2">
           <Label htmlFor="next-open-announcement-title">Title</Label>

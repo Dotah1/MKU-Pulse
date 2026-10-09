@@ -16,7 +16,8 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary_large_image" },
       {
         property: "og:description",
-        content: "Connect, find mentors, discover opportunities and get campus updates — all in one app.",
+        content:
+          "Connect, find mentors, discover opportunities and get campus updates — all in one app.",
       },
     ],
   }),

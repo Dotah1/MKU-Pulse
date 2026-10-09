@@ -65,9 +65,6 @@
   "protocolHandlers": [],
   "fileHandlers": [],
   "launchHandlerClientMode": "",
-  "displayOverride": [
-    "standalone",
-    "minimal-ui"
-  ],
+  "displayOverride": ["standalone", "minimal-ui"],
   "appVersion": "7"
 }

@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -13,7 +14,7 @@ function makeCode(): string {
   return "MKU-" + Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
 }
 
-async function requireAdmin(context: { supabase: any; userId: string }) {
+async function requireAdmin(context: { supabase: SupabaseClient; userId: string }) {
   const { data, error } = await context.supabase.rpc("has_role", {
     _user_id: context.userId,
     _role: "admin",
@@ -35,13 +36,24 @@ export const requestMkuCode = createServerFn({ method: "POST" })
       .select("code, email, expires_at")
       .eq("user_id", context.userId)
       .maybeSingle();
-    if (existing?.code && existing.email === data.email && new Date(existing.expires_at) > new Date()) {
+    if (
+      existing?.code &&
+      existing.email === data.email &&
+      new Date(existing.expires_at) > new Date()
+    ) {
       return { code: existing.code, email: data.email, expiresAt: existing.expires_at };
     }
     for (let i = 0; i < 5; i++) {
       const code = makeCode();
       const { error } = await supabaseAdmin.from("mku_verification_codes").upsert(
-        { user_id: context.userId, email: data.email, code, code_hash: code, attempts: 0, expires_at: expires },
+        {
+          user_id: context.userId,
+          email: data.email,
+          code,
+          code_hash: code,
+          attempts: 0,
+          expires_at: expires,
+        },
         { onConflict: "user_id" },
       );
       if (!error) return { code, email: data.email, expiresAt: expires };

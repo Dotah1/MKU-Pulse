@@ -4,7 +4,7 @@ import { useCampus } from "@/hooks/useCampus";
 import { isAnnouncementExpired } from "@/lib/announcement";
 import { notificationFeedbackKey, playNotificationFeedback } from "@/lib/notification-feedback";
 
-export interface AppNotification {
+interface AppNotification {
   id: string;
   kind: string;
   title: string;
@@ -280,4 +280,4 @@ export function useNotifications(limit = 30) {
   };
 }
 
-export type { NotificationSnapshot };
+export type { AppNotification, NotificationSnapshot };

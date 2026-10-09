@@ -93,7 +93,12 @@ export function SafetyMenu({ me, other, name: rawName, allowUnmatch, onChange }:
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="min-h-11 min-w-11" aria-label="Safety options">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-h-11 min-w-11"
+            aria-label="Safety options"
+          >
             <MoreVertical className="size-4" aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
@@ -106,7 +111,10 @@ export function SafetyMenu({ me, other, name: rawName, allowUnmatch, onChange }:
           <DropdownMenuItem className="min-h-11" onClick={() => setReportOpen(true)}>
             <Flag className="mr-2 size-4" /> Report
           </DropdownMenuItem>
-          <DropdownMenuItem className="min-h-11 text-destructive" onClick={() => void toggleBlock()}>
+          <DropdownMenuItem
+            className="min-h-11 text-destructive"
+            onClick={() => void toggleBlock()}
+          >
             <Ban className="mr-2 size-4" /> {blocked ? "Unblock" : "Block"}
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -119,7 +127,10 @@ export function SafetyMenu({ me, other, name: rawName, allowUnmatch, onChange }:
           </DialogHeader>
           <div className="space-y-2">
             {REPORT_CATEGORIES.map((c) => (
-              <label key={c} className="flex min-h-11 items-center gap-3 rounded-lg border border-border px-3">
+              <label
+                key={c}
+                className="flex min-h-11 items-center gap-3 rounded-lg border border-border px-3"
+              >
                 <input
                   type="radio"
                   name="report-category"

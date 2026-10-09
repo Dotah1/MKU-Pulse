@@ -133,7 +133,15 @@ function MessagesPage() {
         ? supabase.from("mentors").select("user_id").in("user_id", otherIds)
         : Promise.resolve({ data: [] as { user_id: string }[] }),
       rows.length > 0
-        ? supabase.from("messages").select("conversation_id").in("conversation_id", rows.map((row) => row.id)).neq("sender_id", user.id).is("read_at", null)
+        ? supabase
+            .from("messages")
+            .select("conversation_id")
+            .in(
+              "conversation_id",
+              rows.map((row) => row.id),
+            )
+            .neq("sender_id", user.id)
+            .is("read_at", null)
         : Promise.resolve({ data: [] as { conversation_id: string }[] }),
     ]);
     const counts: Record<string, number> = {};
@@ -143,7 +151,9 @@ function MessagesPage() {
     setUnreadCounts(counts);
     const mentorIds = new Set<string>();
     for (const mentor of (mentorResult.data ?? []) as { user_id: string }[]) {
-      const conversation = rows.find((row) => (row.user_a === user.id ? row.user_b : row.user_a) === mentor.user_id);
+      const conversation = rows.find(
+        (row) => (row.user_a === user.id ? row.user_b : row.user_a) === mentor.user_id,
+      );
       if (conversation) mentorIds.add(conversation.id);
     }
     setMentorConversationIds(mentorIds);
@@ -167,14 +177,18 @@ function MessagesPage() {
     if (!user?.id) return;
     const channel = supabase
       .channel(`inbox-${user.id}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
-        const row = payload.new as { conversation_id?: string; sender_id?: string };
-        if (!row.conversation_id || row.sender_id === user.id) return;
-        setUnreadCounts((current) => ({
-          ...current,
-          [row.conversation_id as string]: (current[row.conversation_id as string] ?? 0) + 1,
-        }));
-      })
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const row = payload.new as { conversation_id?: string; sender_id?: string };
+          if (!row.conversation_id || row.sender_id === user.id) return;
+          setUnreadCounts((current) => ({
+            ...current,
+            [row.conversation_id as string]: (current[row.conversation_id as string] ?? 0) + 1,
+          }));
+        },
+      )
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "messages" },
@@ -298,7 +312,10 @@ function MessagesPage() {
             const unread = unreadCounts[conv.id] ?? 0;
             const isMentorConversation = mentorConversationIds.has(conv.id);
             return (
-              <li key={conv.id} className={`flex items-center gap-3 border-l-4 px-4 hover:bg-secondary ${isMentorConversation ? "border-primary bg-primary/5" : unread > 0 ? "border-accent bg-accent/5" : "border-transparent"}`}>
+              <li
+                key={conv.id}
+                className={`flex items-center gap-3 border-l-4 px-4 hover:bg-secondary ${isMentorConversation ? "border-primary bg-primary/5" : unread > 0 ? "border-accent bg-accent/5" : "border-transparent"}`}
+              >
                 <Link
                   to="/u/$id"
                   params={{ id: otherId }}
@@ -328,15 +345,25 @@ function MessagesPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-semibold">{p?.full_name ?? "Student"}</p>
-                      {isMentorConversation && <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]"><GraduationCap className="size-3" aria-hidden="true" /> Mentor</Badge>}
+                      {isMentorConversation && (
+                        <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]">
+                          <GraduationCap className="size-3" aria-hidden="true" /> Mentor
+                        </Badge>
+                      )}
                     </div>
                     <p className="truncate text-xs text-muted-foreground">
                       {conv.last_message || "Say hello"}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
-                    <span className="text-xs text-muted-foreground">{timeAgo(conv.last_message_at)}</span>
-                    {unread > 0 && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-foreground">{unread > 99 ? "99+" : unread} unread</span>}
+                    <span className="text-xs text-muted-foreground">
+                      {timeAgo(conv.last_message_at)}
+                    </span>
+                    {unread > 0 && (
+                      <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-foreground">
+                        {unread > 99 ? "99+" : unread} unread
+                      </span>
+                    )}
                   </div>
                 </button>
               </li>
@@ -996,50 +1023,54 @@ function ChatPane({
           This conversation is no longer available.
         </p>
       ) : (
-      <>
-      <div className="border-t border-border px-3 pt-2" aria-label="Campus slang quick replies">
-        <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Campus quick replies</p>
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          {["Form ni gani?", "Comrades!", "Niko Main Campus", "Library"].map((reply) => (
-            <button
-              key={reply}
-              type="button"
-              disabled={sending}
-              onClick={() => onType(`${draft}${draft && !/\s$/.test(draft) ? " " : ""}${reply}`)}
-              className="min-h-9 shrink-0 rounded-full border border-border bg-background px-3 text-xs font-medium transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary disabled:pointer-events-none disabled:opacity-50"
-            >
-              {reply}
-            </button>
-          ))}
-        </div>
-      </div>
+        <>
+          <div className="border-t border-border px-3 pt-2" aria-label="Campus slang quick replies">
+            <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+              Campus quick replies
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {["Form ni gani?", "Comrades!", "Niko Main Campus", "Library"].map((reply) => (
+                <button
+                  key={reply}
+                  type="button"
+                  disabled={sending}
+                  onClick={() =>
+                    onType(`${draft}${draft && !/\s$/.test(draft) ? " " : ""}${reply}`)
+                  }
+                  className="min-h-9 shrink-0 rounded-full border border-border bg-background px-3 text-xs font-medium transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary disabled:pointer-events-none disabled:opacity-50"
+                >
+                  {reply}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      <div className="flex items-end gap-2 border-t border-border p-3">
-        <Textarea
-          value={draft}
-          onChange={(e) => onType(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-          rows={1}
-          maxLength={2000}
-          placeholder={`Message ${other?.full_name?.split(" ")[0] ?? "student"}…`}
-          aria-label="Message"
-          className="min-h-11 min-w-0 flex-1 resize-none"
-        />
-        <Button
-          onClick={() => void send()}
-          disabled={sending}
-          className="min-h-11"
-          aria-label="Send"
-        >
-          <Send className="size-4" aria-hidden="true" />
-        </Button>
-      </div>
-      </>
+          <div className="flex items-end gap-2 border-t border-border p-3">
+            <Textarea
+              value={draft}
+              onChange={(e) => onType(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
+              rows={1}
+              maxLength={2000}
+              placeholder={`Message ${other?.full_name?.split(" ")[0] ?? "student"}…`}
+              aria-label="Message"
+              className="min-h-11 min-w-0 flex-1 resize-none"
+            />
+            <Button
+              onClick={() => void send()}
+              disabled={sending}
+              className="min-h-11"
+              aria-label="Send"
+            >
+              <Send className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );
