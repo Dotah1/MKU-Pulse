@@ -181,6 +181,7 @@ export type Database = {
           experience: string
           expertise: string
           id: string
+          mentorship_areas: string[]
           photo_url: string | null
           reviewed_at: string | null
           reviewed_by: string | null
@@ -195,6 +196,7 @@ export type Database = {
           experience: string
           expertise: string
           id?: string
+          mentorship_areas?: string[]
           photo_url?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -209,6 +211,7 @@ export type Database = {
           experience?: string
           expertise?: string
           id?: string
+          mentorship_areas?: string[]
           photo_url?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -254,6 +257,7 @@ export type Database = {
           created_at: string
           experience: string
           expertise: string
+          mentorship_areas: string[]
           rating: number
           rating_count: number
           user_id: string
@@ -263,6 +267,7 @@ export type Database = {
           created_at?: string
           experience?: string
           expertise?: string
+          mentorship_areas?: string[]
           rating?: number
           rating_count?: number
           user_id: string
@@ -272,6 +277,7 @@ export type Database = {
           created_at?: string
           experience?: string
           expertise?: string
+          mentorship_areas?: string[]
           rating?: number
           rating_count?: number
           user_id?: string

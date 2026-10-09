@@ -55,6 +55,7 @@ interface MentorAppRow {
   experience: string;
   status: string;
   created_at: string;
+  mentorship_areas: string[];
 }
 
 interface ReportRow {
@@ -146,7 +147,9 @@ function AdminPage() {
         .order("created_at", { ascending: true }),
       supabase
         .from("mentor_applications")
-        .select("id, user_id, expertise, availability, experience, status, created_at")
+        .select(
+          "id, user_id, expertise, availability, experience, status, created_at, mentorship_areas",
+        )
         .eq("status", "pending")
         .order("created_at", { ascending: true }),
       supabase
@@ -296,6 +299,7 @@ function AdminPage() {
         expertise: row.expertise,
         availability: row.availability,
         experience: row.experience,
+        mentorship_areas: row.mentorship_areas ?? [],
       });
       await supabase.from("user_roles").insert({ user_id: row.user_id, role: "mentor" });
     }

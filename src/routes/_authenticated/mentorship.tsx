@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { GraduationCap, Loader2, MessageCircle, Star } from "lucide-react";
+import { Check, GraduationCap, Loader2, MessageCircle, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notify } from "@/lib/notify";
 import { useCampus } from "@/hooks/useCampus";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { sanitizeText } from "@/lib/campus";
 import { fetchProfiles, getOrCreateConversation, type MiniProfile } from "@/lib/campus-data";
 
@@ -36,7 +37,20 @@ interface MentorRow {
   experience: string;
   rating: number;
   rating_count: number;
+  mentorship_areas: string[];
 }
+
+const MENTORSHIP_AREAS = [
+  "Academic Guidance",
+  "Study Skills and Exam Preparation",
+  "Research and Academic Writing",
+  "Career Guidance",
+  "Clinical and Professional Development",
+  "Leadership and Student Organizations",
+  "Entrepreneurship and Business",
+  "Campus Life and Student Adjustment",
+  "Other",
+] as const;
 
 interface ApplicationRow {
   id: string;
@@ -53,15 +67,34 @@ function MentorshipPage() {
   const [application, setApplication] = useState<ApplicationRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [area, setArea] = useState<string | null>(null);
+  const [verifiedIds, setVerifiedIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const { data } = await supabase
       .from("mentors")
-      .select("user_id, expertise, availability, experience, rating, rating_count")
+      .select(
+        "user_id, expertise, availability, experience, rating, rating_count, mentorship_areas",
+      )
       .order("rating", { ascending: false });
     const rows = (data ?? []) as MentorRow[];
     setMentors(rows);
-    setProfiles(await fetchProfiles(rows.map((r) => r.user_id)));
+    const [profileMap, verification] = await Promise.all([
+      fetchProfiles(rows.map((r) => r.user_id)),
+      rows.length > 0
+        ? supabase
+            .from("profiles")
+            .select("id, mku_verified")
+            .in(
+              "id",
+              rows.map((r) => r.user_id),
+            )
+        : Promise.resolve({ data: [] as { id: string; mku_verified: boolean }[] }),
+    ]);
+    setProfiles(profileMap);
+    setVerifiedIds(
+      new Set((verification.data ?? []).filter((p) => p.mku_verified).map((p) => p.id)),
+    );
 
     if (user) {
       const { data: app } = await supabase
@@ -83,7 +116,7 @@ function MentorshipPage() {
   const filtered = mentors.filter((m) => {
     const p = profiles[m.user_id];
     const hay = `${p?.full_name ?? ""} ${m.expertise} ${p?.major ?? ""}`.toLowerCase();
-    return hay.includes(query.trim().toLowerCase());
+    return hay.includes(query.trim().toLowerCase()) && (!area || m.mentorship_areas.includes(area));
   });
 
   const message = async (mentorId: string) => {
@@ -152,11 +185,39 @@ function MentorshipPage() {
         />
       </div>
 
+      <div
+        className="flex gap-2 overflow-x-auto pb-1"
+        role="group"
+        aria-label="Filter mentors by area"
+      >
+        <Button
+          type="button"
+          variant={area === null ? "default" : "outline"}
+          className="min-h-10 shrink-0 rounded-full"
+          onClick={() => setArea(null)}
+        >
+          All Mentors
+        </Button>
+        {MENTORSHIP_AREAS.map((item) => (
+          <Button
+            key={item}
+            type="button"
+            variant={area === item ? "default" : "outline"}
+            className="min-h-10 shrink-0 rounded-full"
+            onClick={() => setArea(item)}
+          >
+            {item}
+          </Button>
+        ))}
+      </div>
+
       {loading ? (
         <Loader2 className="mx-auto my-12 size-6 animate-spin text-muted-foreground" />
       ) : filtered.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          No mentors listed yet. Applications are reviewed by the admin team.
+          {area
+            ? `No mentors are listed for ${area} yet.`
+            : "No mentors listed yet. Applications are reviewed by the admin team."}
         </p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -182,9 +243,23 @@ function MentorshipPage() {
                       <Star className="size-3 fill-accent text-accent" aria-hidden="true" />
                       {m.rating.toFixed(1)} ({m.rating_count})
                     </p>
+                    {verifiedIds.has(m.user_id) && (
+                      <Badge variant="secondary" className="mt-1 gap-1 text-[10px]">
+                        <Check className="size-3" aria-hidden="true" /> Verified MKU Student
+                      </Badge>
+                    )}
                   </div>
                 </div>
                 <p className="mt-3 text-sm font-medium">{m.expertise}</p>
+                {m.mentorship_areas.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {m.mentorship_areas.map((item) => (
+                      <Badge key={item} variant="outline" className="text-[10px]">
+                        {item}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
                 <p className="mt-1 text-sm text-muted-foreground">{m.experience}</p>
                 <Badge variant="secondary" className="mt-2">
                   {m.availability || "Flexible"}
@@ -234,17 +309,23 @@ function MentorApplication({
   const [expertise, setExpertise] = useState("");
   const [availability, setAvailability] = useState("");
   const [experience, setExperience] = useState("");
+  const [areas, setAreas] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (areas.length === 0) {
+      toast.error("Select at least one mentorship area");
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.from("mentor_applications").insert({
       user_id: user.id,
       expertise: sanitizeText(expertise, 200),
       availability: sanitizeText(availability, 200),
       experience: sanitizeText(experience, 1000),
+      mentorship_areas: areas,
       status: "pending",
     });
     setBusy(false);
@@ -256,6 +337,7 @@ function MentorApplication({
     setExpertise("");
     setAvailability("");
     setExperience("");
+    setAreas([]);
     onSubmitted();
   };
 
@@ -302,6 +384,29 @@ function MentorApplication({
               onChange={(e) => setAvailability(e.target.value)}
               className="mt-1 min-h-11"
             />
+          </div>
+          <div>
+            <Label>Mentorship areas</Label>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {MENTORSHIP_AREAS.map((area) => (
+                <label
+                  key={area}
+                  className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-xs hover:bg-secondary"
+                >
+                  <Checkbox
+                    checked={areas.includes(area)}
+                    onCheckedChange={() =>
+                      setAreas((current) =>
+                        current.includes(area)
+                          ? current.filter((item) => item !== area)
+                          : [...current, area],
+                      )
+                    }
+                  />
+                  {area}
+                </label>
+              ))}
+            </div>
           </div>
           <div>
             <Label htmlFor="m-story">Relevant experience</Label>
