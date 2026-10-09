@@ -324,7 +324,7 @@ function SignupForm() {
       email: cleanEmail,
       password,
       options: {
-        emailRedirectTo: "https://mku-pulse.vercel.app",
+        emailRedirectTo: "https://mku-pulse.vercel.app/auth?mode=signin",
         data: {
           full_name: sanitizeText(fullName, 80),
           phone: phone.trim(),
