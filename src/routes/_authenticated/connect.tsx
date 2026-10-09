@@ -18,10 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  countToday,
   calculateRoommateCompatibility,
+  fetchConnectCandidates,
   fetchProfiles,
   getOrCreateConversation,
+  startOfToday,
   type MiniProfile,
 } from "@/lib/campus-data";
 
@@ -85,7 +86,7 @@ function ConnectPage() {
   const suppressClick = useRef(false);
   const pendingSwipe = useRef<{ action: SwipeAction; person: MiniProfile } | null>(null);
   const exitTimer = useRef<number | null>(null);
-  const candidateOffset = useRef(0);
+  const candidateCursor = useRef<string | null>(null);
   const seenProfileIds = useRef(new Set<string>());
   const queuedProfileIds = useRef(new Set<string>());
   const matchesRequestGeneration = useRef(0);
@@ -95,34 +96,24 @@ function ConnectPage() {
     if (!user) return;
     setLoading(true);
     setHasMoreCandidates(true);
-    candidateOffset.current = 0;
+    candidateCursor.current = null;
     queuedProfileIds.current = new Set<string>();
-    const { data: swiped, error: swipeError } = await supabase
-      .from("swipes")
-      .select("swipee_id, action, created_at")
-      .eq("swiper_id", user.id);
-    if (swipeError) {
-      toast.error(swipeError.message);
-      setDeck([]);
-      setHasMoreCandidates(false);
-      setLoading(false);
-      return;
-    }
-    const seen = new Set((swiped ?? []).map((s) => s.swipee_id as string));
-    seen.add(user.id);
-    for (const blockedId of await fetchBlockedIds()) seen.add(blockedId);
-    seenProfileIds.current = seen;
-
-    const query = supabase
-      .from("profiles")
-      .select(
-        "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_banned, is_private",
-      )
-      .eq("is_banned", false)
-      .eq("is_private", false);
-    const { data, error } = await query
-      .order("id", { ascending: true })
-      .range(0, CANDIDATE_PAGE_SIZE - 1);
+    seenProfileIds.current = new Set([user.id]);
+    const [candidateResult, swipeCountResult, superLikeCountResult] = await Promise.all([
+      fetchConnectCandidates(null, CANDIDATE_PAGE_SIZE + 1),
+      supabase
+        .from("swipes")
+        .select("id", { count: "exact", head: true })
+        .eq("swiper_id", user.id)
+        .gte("created_at", startOfToday()),
+      supabase
+        .from("swipes")
+        .select("id", { count: "exact", head: true })
+        .eq("swiper_id", user.id)
+        .eq("action", "super_like")
+        .gte("created_at", startOfToday()),
+    ]);
+    const { data, error } = candidateResult;
     if (error) {
       toast.error(error.message);
       setDeck([]);
@@ -131,41 +122,33 @@ function ConnectPage() {
       return;
     }
 
-    const rows = (data ?? []) as (MiniProfile & { is_banned: boolean })[];
-    candidateOffset.current = rows.length;
-    const list = rows.filter((person) => !seen.has(person.id));
+    const fetched = data ?? [];
+    const rows = fetched.slice(0, CANDIDATE_PAGE_SIZE) as MiniProfile[];
+    candidateCursor.current = rows.at(-1)?.id ?? null;
+    const list = rows;
     queuedProfileIds.current = new Set(list.map((person) => person.id));
     setDeck(list.sort(() => Math.random() - 0.5));
-    setHasMoreCandidates(rows.length === CANDIDATE_PAGE_SIZE);
-    setSwipesToday(await countToday("swipes", "swiper_id", user.id));
-    const supers = (swiped ?? []).filter(
-      (swipe) =>
-        swipe.action === "super_like" &&
-        new Date(swipe.created_at as string).toDateString() === new Date().toDateString(),
-    ).length;
-    setSuperToday(supers);
+    setHasMoreCandidates(fetched.length > CANDIDATE_PAGE_SIZE);
+    setSwipesToday(swipeCountResult.count ?? 0);
+    setSuperToday(superLikeCountResult.count ?? 0);
+    if (swipeCountResult.error) toast.error(swipeCountResult.error.message);
+    if (superLikeCountResult.error) toast.error(superLikeCountResult.error.message);
     setLoading(false);
   }, [user]);
 
   const loadMoreCandidates = async () => {
     if (!user || loadingMoreCandidates || !hasMoreCandidates) return;
     setLoadingMoreCandidates(true);
-    const query = supabase
-      .from("profiles")
-      .select(
-        "id, full_name, avatar_url, major, year_of_study, bio, interests, tier, is_banned, is_private",
-      )
-      .eq("is_banned", false)
-      .eq("is_private", false);
-    const offset = candidateOffset.current;
     try {
-      const { data, error } = await query
-        .order("id", { ascending: true })
-        .range(offset, offset + CANDIDATE_PAGE_SIZE - 1);
+      const { data, error } = await fetchConnectCandidates(
+        candidateCursor.current,
+        CANDIDATE_PAGE_SIZE + 1,
+      );
       if (error) throw error;
-      const rows = (data ?? []) as (MiniProfile & { is_banned: boolean })[];
-      candidateOffset.current = offset + rows.length;
-      setHasMoreCandidates(rows.length === CANDIDATE_PAGE_SIZE);
+      const fetched = data ?? [];
+      const rows = fetched.slice(0, CANDIDATE_PAGE_SIZE) as MiniProfile[];
+      candidateCursor.current = rows.at(-1)?.id ?? candidateCursor.current;
+      setHasMoreCandidates(fetched.length > CANDIDATE_PAGE_SIZE);
       const next = rows
         .filter(
           (person) =>

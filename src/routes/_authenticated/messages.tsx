@@ -12,7 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { sanitizeText, timeAgo } from "@/lib/campus";
-import { fetchProfiles, getOrCreateConversation, type MiniProfile } from "@/lib/campus-data";
+import {
+  fetchMyConversationPage,
+  fetchProfiles,
+  getOrCreateConversation,
+  type InboxConversationRow,
+  type MiniProfile,
+} from "@/lib/campus-data";
 
 export const Route = createFileRoute("/_authenticated/messages")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -60,6 +66,7 @@ interface MessageRow {
 }
 
 const MESSAGE_PAGE_SIZE = 50;
+const CONVERSATION_PAGE_SIZE = 30;
 
 interface PostRef {
   id: string;
@@ -116,57 +123,127 @@ function MessagesPage() {
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [mentorConversationIds, setMentorConversationIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const loadedContext = useRef<string | null | undefined>(undefined);
+  const [hasMoreConversations, setHasMoreConversations] = useState(false);
+  const [loadingMoreConversations, setLoadingMoreConversations] = useState(false);
+  const conversationCursor = useRef<ConversationRow | null>(null);
+  const conversationRequestInFlight = useRef(false);
+  const directConversationLookups = useRef(new Set<string>());
+  const conversationsRef = useRef<ConversationRow[]>(conversations);
+  conversationsRef.current = conversations;
 
-  const load = useCallback(async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("conversations")
-      .select("id, user_a, user_b, last_message, last_message_at")
-      .order("last_message_at", { ascending: false });
-    const rows = (data ?? []) as ConversationRow[];
-    setConversations(rows);
-    const otherIds = rows.map((r) => (r.user_a === user.id ? r.user_b : r.user_a));
-    const [profiles, mentorResult, unreadResult] = await Promise.all([
-      fetchProfiles(otherIds),
-      otherIds.length > 0
-        ? supabase.from("mentors").select("user_id").in("user_id", otherIds)
-        : Promise.resolve({ data: [] as { user_id: string }[] }),
-      rows.length > 0
-        ? supabase
-            .from("messages")
-            .select("conversation_id")
-            .in(
-              "conversation_id",
-              rows.map((row) => row.id),
-            )
-            .neq("sender_id", user.id)
-            .is("read_at", null)
-        : Promise.resolve({ data: [] as { conversation_id: string }[] }),
-    ]);
-    const counts: Record<string, number> = {};
-    for (const row of (unreadResult.data ?? []) as { conversation_id: string }[]) {
-      counts[row.conversation_id] = (counts[row.conversation_id] ?? 0) + 1;
-    }
-    setUnreadCounts(counts);
-    const mentorIds = new Set<string>();
-    for (const mentor of (mentorResult.data ?? []) as { user_id: string }[]) {
-      const conversation = rows.find(
-        (row) => (row.user_a === user.id ? row.user_b : row.user_a) === mentor.user_id,
-      );
-      if (conversation) mentorIds.add(conversation.id);
-    }
-    setMentorConversationIds(mentorIds);
-    setPeople(profiles);
-    setLoading(false);
-  }, [user]);
+  const loadConversations = useCallback(
+    async (options: { append?: boolean; silent?: boolean } = {}) => {
+      if (!user || conversationRequestInFlight.current) return;
+      const append = options.append ?? false;
+      const silent = options.silent ?? false;
+      conversationRequestInFlight.current = true;
+      if (append) setLoadingMoreConversations(true);
+      else if (!silent) setLoading(true);
+      const cursor = append ? conversationCursor.current : null;
+      try {
+        const { data, error } = await fetchMyConversationPage({
+          _before_last_message_at: cursor?.last_message_at ?? null,
+          _before_id: cursor?.id ?? null,
+          _conversation_id: null,
+          _limit: CONVERSATION_PAGE_SIZE + 1,
+        });
+        if (error) throw error;
+        const fetched = (data ?? []) as InboxConversationRow[];
+        const rows = fetched.slice(0, CONVERSATION_PAGE_SIZE);
+        conversationCursor.current = rows.at(-1) ?? null;
+        setHasMoreConversations(fetched.length > CONVERSATION_PAGE_SIZE);
+        setConversations((current) => {
+          const merged = new Map<string, ConversationRow>();
+          for (const row of current) merged.set(row.id, row);
+          for (const row of rows) merged.set(row.id, row);
+          return [...merged.values()].sort(
+            (left, right) =>
+              right.last_message_at.localeCompare(left.last_message_at) ||
+              right.id.localeCompare(left.id),
+          );
+        });
+        setUnreadCounts((current) => {
+          const next = { ...current };
+          for (const row of rows) next[row.id] = Number(row.unread_count) || 0;
+          return next;
+        });
+        setMentorConversationIds((current) => {
+          const next = new Set(current);
+          for (const row of rows) {
+            if (row.is_mentor) next.add(row.id);
+            else next.delete(row.id);
+          }
+          return next;
+        });
+        const otherIds = rows.map((row) => (row.user_a === user.id ? row.user_b : row.user_a));
+        const profiles = await fetchProfiles(otherIds);
+        setPeople((current) => ({ ...current, ...profiles }));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not load conversations");
+      } finally {
+        conversationRequestInFlight.current = false;
+        if (append) setLoadingMoreConversations(false);
+        setLoading(false);
+      }
+    },
+    [user],
+  );
 
   useEffect(() => {
-    const context = `${user?.id ?? "no-user"}:${c ?? "inbox"}`;
-    if (loadedContext.current === context) return;
-    loadedContext.current = context;
-    if (!c || !conversations.some((conversation) => conversation.id === c)) void load();
-  }, [c, conversations, load, user?.id]);
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+    conversationCursor.current = null;
+    setHasMoreConversations(false);
+    void loadConversations();
+  }, [loadConversations, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !c || conversationsRef.current.some((row) => row.id === c)) return;
+    const lookupKey = `${user.id}:${c}`;
+    const lookupSet = directConversationLookups.current;
+    if (lookupSet.has(lookupKey)) return;
+    lookupSet.add(lookupKey);
+    let active = true;
+    void (async () => {
+      const { data, error } = await fetchMyConversationPage({
+        _before_last_message_at: null,
+        _before_id: null,
+        _conversation_id: c,
+        _limit: 1,
+      });
+      if (!active) return;
+      const row = (data?.[0] ?? null) as InboxConversationRow | null;
+      if (error || !row) {
+        lookupSet.delete(lookupKey);
+        toast.error("That conversation is unavailable");
+        return;
+      }
+      setConversations((current) => {
+        if (current.some((item) => item.id === row.id)) return current;
+        return [...current, row].sort(
+          (left, right) =>
+            right.last_message_at.localeCompare(left.last_message_at) ||
+            right.id.localeCompare(left.id),
+        );
+      });
+      setUnreadCounts((current) => ({ ...current, [row.id]: Number(row.unread_count) || 0 }));
+      setMentorConversationIds((current) => {
+        const next = new Set(current);
+        if (row.is_mentor) next.add(row.id);
+        else next.delete(row.id);
+        return next;
+      });
+      const otherId = row.user_a === user.id ? row.user_b : row.user_a;
+      const profiles = await fetchProfiles([otherId]);
+      if (active) setPeople((current) => ({ ...current, ...profiles }));
+    })();
+    return () => {
+      active = false;
+      lookupSet.delete(lookupKey);
+    };
+  }, [c, user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -174,46 +251,27 @@ function MessagesPage() {
   }, [c, user?.id]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    const channel = supabase
-      .channel(`inbox-${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        (payload) => {
-          const row = payload.new as { conversation_id?: string; sender_id?: string };
-          if (!row.conversation_id || row.sender_id === user.id) return;
-          setUnreadCounts((current) => ({
-            ...current,
-            [row.conversation_id as string]: (current[row.conversation_id as string] ?? 0) + 1,
-          }));
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "messages" },
-        (payload) => {
-          const row = payload.new as {
-            conversation_id?: string;
-            sender_id?: string;
-            read_at?: string | null;
-          };
-          if (!row.conversation_id || row.sender_id === user.id || !row.read_at) return;
-          const conversationId = row.conversation_id;
-          setUnreadCounts((current) => {
-            const next = { ...current };
-            if (c === conversationId) {
-              next[conversationId] = 0;
-            } else {
-              next[conversationId] = Math.max(0, (next[conversationId] ?? 0) - 1);
-            }
-            return next;
-          });
-        },
-      )
-      .subscribe();
-    return () => void supabase.removeChannel(channel);
-  }, [user?.id, c]);
+    if (!user?.id || c) return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        void loadConversations({ silent: true });
+      }
+    };
+    refreshWhenVisible();
+    const interval = window.setInterval(refreshWhenVisible, 60_000);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [c, loadConversations, user?.id]);
+
+  const loadMoreConversations = () => {
+    if (!hasMoreConversations || loadingMoreConversations) return;
+    void loadConversations({ append: true, silent: true });
+  };
 
   useEffect(() => {
     if (!user || !p || c) return;
@@ -370,6 +428,19 @@ function MessagesPage() {
             );
           })}
         </ul>
+      )}
+      {!loading && hasMoreConversations && (
+        <div className="flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={loadingMoreConversations}
+            onClick={loadMoreConversations}
+          >
+            {loadingMoreConversations ? "Loading conversations…" : "Load older conversations"}
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -767,9 +838,7 @@ function ChatPane({
         )
         .subscribe((status) => {
           if (disposed || activeChannel !== channel) return;
-          if (status === "SUBSCRIBED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            void load();
-          }
+          if (status === "SUBSCRIBED") void load();
         });
     };
 

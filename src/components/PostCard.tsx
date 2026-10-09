@@ -29,7 +29,12 @@ import {
 } from "@/components/ui/dialog";
 import { TIER_LIMITS, timeAgo, sanitizeText } from "@/lib/campus";
 import { deletePostWithMedia } from "@/lib/media.functions";
-import { getOrCreateConversation, type MiniProfile } from "@/lib/campus-data";
+import {
+  fetchPostCardMetrics,
+  getOrCreateConversation,
+  type MiniProfile,
+  type PostCardMetrics,
+} from "@/lib/campus-data";
 import { shareToWhatsApp } from "@/lib/share";
 import { notify } from "@/lib/notify";
 
@@ -87,13 +92,17 @@ interface Comment {
   created_at: string;
 }
 
+const COMMENT_PAGE_SIZE = 20;
+
 export function PostCard({
   post,
   author,
+  metrics,
   onDeleted,
 }: {
   post: PostRow;
   author: MiniProfile | undefined;
+  metrics?: PostCardMetrics | undefined;
   onDeleted: (id: string) => void;
 }) {
   const { user, isAdmin, profile } = useCampus();
@@ -103,6 +112,8 @@ export function PostCard({
   const [showComments, setShowComments] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [hasOlderComments, setHasOlderComments] = useState(false);
+  const [loadingOlderComments, setLoadingOlderComments] = useState(false);
   const [commentAuthors, setCommentAuthors] = useState<Record<string, MiniProfile>>({});
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
@@ -110,14 +121,32 @@ export function PostCard({
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState("");
   const [reporting, setReporting] = useState(false);
+  const commentCursor = useRef<Comment | null>(null);
 
   const mine = user?.id === post.user_id;
   const [cardRef, isNearViewport] = useNearViewport<HTMLElement>();
 
   useEffect(() => {
     if (!isNearViewport) return;
+    if (metrics) {
+      setLikes(metrics.like_count);
+      setLiked(metrics.viewer_liked);
+      setCommentCount(metrics.comment_count);
+      setReported(metrics.viewer_reported);
+      return;
+    }
     let active = true;
     void (async () => {
+      const metricsById = await fetchPostCardMetrics([post.id]);
+      const fetchedMetrics = metricsById?.[post.id];
+      if (!active) return;
+      if (fetchedMetrics) {
+        setLikes(fetchedMetrics.like_count);
+        setLiked(fetchedMetrics.viewer_liked);
+        setCommentCount(fetchedMetrics.comment_count);
+        setReported(fetchedMetrics.viewer_reported);
+        return;
+      }
       const [{ count }, { data: mineLike }, { count: comments }, { data: myReport }] =
         await Promise.all([
           supabase
@@ -151,7 +180,7 @@ export function PostCard({
     return () => {
       active = false;
     };
-  }, [post.id, user?.id, isNearViewport]);
+  }, [post.id, user?.id, isNearViewport, metrics]);
 
   const toggleLike = async () => {
     if (!user) return;
@@ -184,16 +213,61 @@ export function PostCard({
   };
 
   const loadComments = async () => {
-    const { data } = await supabase
+    const { data, count, error } = await supabase
+      .from("post_comments")
+      .select("id, user_id, content, parent_id, created_at", { count: "exact" })
+      .eq("post_id", post.id)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(COMMENT_PAGE_SIZE + 1);
+    if (error) {
+      toast.error("Could not load comments");
+      return;
+    }
+    const page = (data ?? []) as Comment[];
+    const rows = page.slice(0, COMMENT_PAGE_SIZE).reverse();
+    commentCursor.current = rows[0] ?? null;
+    setHasOlderComments(page.length > COMMENT_PAGE_SIZE);
+    setComments(rows);
+    setCommentCount(count ?? rows.length);
+    const { fetchProfiles } = await import("@/lib/campus-data");
+    setCommentAuthors(await fetchProfiles(rows.map((r) => r.user_id)));
+  };
+
+  const loadOlderComments = async () => {
+    const cursor = commentCursor.current;
+    if (!cursor || loadingOlderComments || !hasOlderComments) return;
+    setLoadingOlderComments(true);
+    const { data, error } = await supabase
       .from("post_comments")
       .select("id, user_id, content, parent_id, created_at")
       .eq("post_id", post.id)
-      .order("created_at", { ascending: true });
-    const rows = (data ?? []) as Comment[];
-    setComments(rows);
-    setCommentCount(rows.length);
+      .or(
+        `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`,
+      )
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(COMMENT_PAGE_SIZE + 1);
+    setLoadingOlderComments(false);
+    if (error) {
+      toast.error("Could not load older comments");
+      return;
+    }
+    const page = (data ?? []) as Comment[];
+    const older = page.slice(0, COMMENT_PAGE_SIZE).reverse();
+    if (older.length === 0) {
+      setHasOlderComments(false);
+      return;
+    }
+    commentCursor.current = older[0] ?? cursor;
+    setHasOlderComments(page.length > COMMENT_PAGE_SIZE);
+    setComments((current) => {
+      const currentIds = new Set(current.map((comment) => comment.id));
+      return [...older.filter((comment) => !currentIds.has(comment.id)), ...current];
+    });
     const { fetchProfiles } = await import("@/lib/campus-data");
-    setCommentAuthors(await fetchProfiles(rows.map((r) => r.user_id)));
+    const authors = await fetchProfiles(older.map((comment) => comment.user_id));
+    setCommentAuthors((current) => ({ ...current, ...authors }));
   };
 
   const openComments = async () => {
@@ -292,7 +366,10 @@ export function PostCard({
 
   const name = author?.full_name || "Student";
   const authorPlan = TIER_LIMITS[author?.tier ?? "free"];
-  const threads = comments.filter((c) => !c.parent_id);
+  const commentIds = new Set(comments.map((comment) => comment.id));
+  const threads = comments.filter(
+    (comment) => !comment.parent_id || !commentIds.has(comment.parent_id),
+  );
   const repliesOf = (id: string) => comments.filter((c) => c.parent_id === id);
   // Announcements have their own visual identity; content heuristics such as
   // the word "found" must not relabel them as Lost & Found.
@@ -499,9 +576,23 @@ export function PostCard({
 
       {showComments && (
         <div className="mt-3 space-y-3 border-t border-border pt-3">
+          {hasOlderComments && (
+            <div className="flex justify-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-10"
+                disabled={loadingOlderComments}
+                onClick={() => void loadOlderComments()}
+              >
+                {loadingOlderComments ? "Loading…" : "Load older comments"}
+              </Button>
+            </div>
+          )}
           {threads.map((c) => (
             <div key={c.id} className="space-y-2">
-              {commentRow(c, false)}
+              {commentRow(c, Boolean(c.parent_id))}
               {repliesOf(c.id).map((r) => commentRow(r, true))}
             </div>
           ))}

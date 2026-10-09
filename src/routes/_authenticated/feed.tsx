@@ -14,7 +14,13 @@ import { Label } from "@/components/ui/label";
 import { CampusToolsDialog } from "@/components/CampusToolsDialog";
 import { POST_MEDIA_MAX_BYTES, POST_VIDEO_MAX_SECONDS, sanitizeText } from "@/lib/campus";
 import { compressImageFile, compressVideoFile, uploadFile, videoDuration } from "@/lib/storage";
-import { checkAndUpdateStreak, checkInServerStreak, countToday } from "@/lib/campus-data";
+import {
+  checkAndUpdateStreak,
+  checkInServerStreak,
+  countToday,
+  fetchPostCardMetrics,
+  type PostCardMetrics,
+} from "@/lib/campus-data";
 
 const FEED_FILTERS = [
   { id: "all", label: "🔥 All Posts" },
@@ -124,6 +130,7 @@ function FeedPage() {
   const { user, profile, isAdmin, limits, tier } = useCampus();
   const { relist } = Route.useSearch();
   const [posts, setPosts] = useState<PostRow[]>([]);
+  const [postMetrics, setPostMetrics] = useState<Record<string, PostCardMetrics> | null>(null);
   const [polls, setPolls] = useState<PollRow[]>([]);
   const [pollOptions, setPollOptions] = useState<Record<string, PollOptionRow[]>>({});
   const [loading, setLoading] = useState(true);
@@ -139,6 +146,8 @@ function FeedPage() {
   const knownPostIds = useRef(new Set<string>());
   const pendingNewPostIds = useRef(new Set<string>());
   const hasLoadedFeed = useRef(false);
+  const checkingForNewPosts = useRef(false);
+  const lastNewPostCheck = useRef(0);
   const authors = usePostAuthors(posts);
   const filteredPosts = useMemo(
     () => posts.filter((post) => postMatchesFilter(post, activeFilter)),
@@ -184,7 +193,10 @@ function FeedPage() {
       }
     } else {
       const rows = data ?? [];
+      const metrics = await fetchPostCardMetrics(rows.map((post) => post.id));
+      if (generation !== feedGeneration.current) return;
       setPosts(rows);
+      setPostMetrics(metrics);
       postsOffset.current = rows.length;
       knownPostIds.current = new Set(rows.map((post) => post.id));
       for (const post of rows) pendingNewPostIds.current.delete(post.id);
@@ -216,6 +228,8 @@ function FeedPage() {
       if (generation !== feedGeneration.current) return;
       if (error) throw error;
       const rows = (data ?? []) as PostRow[];
+      const metrics = await fetchPostCardMetrics(rows.map((post) => post.id));
+      if (generation !== feedGeneration.current) return;
       postsOffset.current = offset + rows.length;
       for (const post of rows) {
         knownPostIds.current.add(post.id);
@@ -226,6 +240,7 @@ function FeedPage() {
         const ids = new Set(current.map((post) => post.id));
         return [...current, ...rows.filter((post) => !ids.has(post.id))];
       });
+      setPostMetrics((current) => (current && metrics ? { ...current, ...metrics } : null));
       setHasMorePosts(rows.length === POSTS_PAGE_SIZE);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not load more posts");
@@ -238,59 +253,51 @@ function FeedPage() {
     void load();
   }, [load]);
 
+  const checkForNewPosts = useCallback(async () => {
+    if (
+      !user?.id ||
+      !hasLoadedFeed.current ||
+      checkingForNewPosts.current ||
+      Date.now() - lastNewPostCheck.current < 10_000
+    ) {
+      return;
+    }
+    checkingForNewPosts.current = true;
+    lastNewPostCheck.current = Date.now();
+    try {
+      const { data, error } = await supabase
+        .from("posts")
+        .select("id")
+        .order("is_announcement", { ascending: false })
+        .order("created_at", { ascending: false })
+        .range(0, POSTS_PAGE_SIZE - 1);
+      if (error) return;
+
+      for (const post of data ?? []) {
+        if (!knownPostIds.current.has(post.id)) {
+          pendingNewPostIds.current.add(post.id);
+        }
+      }
+      setNewPostCount(pendingNewPostIds.current.size);
+    } finally {
+      checkingForNewPosts.current = false;
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user?.id) return;
-    const channel = supabase
-      .channel(`feed-posts-${user.id}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
-        const inserted = payload.new as { id?: unknown };
-        if (
-          typeof inserted.id !== "string" ||
-          knownPostIds.current.has(inserted.id) ||
-          pendingNewPostIds.current.has(inserted.id)
-        ) {
-          return;
-        }
-        pendingNewPostIds.current.add(inserted.id);
-        setNewPostCount(pendingNewPostIds.current.size);
-      })
-      .subscribe();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void checkForNewPosts();
+    };
+    const interval = window.setInterval(refreshWhenVisible, 60_000);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
-      void supabase.removeChannel(channel);
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [user?.id]);
-
-  const checkForNewPosts = useCallback(async () => {
-    if (!user?.id || !hasLoadedFeed.current) return;
-    const { data, error } = await supabase
-      .from("posts")
-      .select("id, user_id")
-      .order("is_announcement", { ascending: false })
-      .order("created_at", { ascending: false })
-      .range(0, POSTS_PAGE_SIZE - 1);
-    if (error) return;
-
-    for (const post of data ?? []) {
-      if (!knownPostIds.current.has(post.id)) {
-        pendingNewPostIds.current.add(post.id);
-      }
-    }
-    setNewPostCount(pendingNewPostIds.current.size);
-  }, [user?.id]);
-
-  useEffect(() => {
-    let wasHidden = document.visibilityState === "hidden";
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        wasHidden = true;
-      } else if (wasHidden) {
-        wasHidden = false;
-        void checkForNewPosts();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [checkForNewPosts]);
+  }, [user?.id, checkForNewPosts]);
 
   useEffect(() => {
     if (!user) return;
@@ -444,6 +451,7 @@ function FeedPage() {
             <PostCard
               key={p.id}
               post={p}
+              metrics={postMetrics?.[p.id]}
               author={authors[p.user_id]}
               onDeleted={(id) => {
                 postsOffset.current = Math.max(0, postsOffset.current - 1);

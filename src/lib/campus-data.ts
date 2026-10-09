@@ -6,6 +6,67 @@ export type MiniProfile = Pick<
   "id" | "full_name" | "avatar_url" | "major" | "year_of_study" | "bio" | "interests" | "tier"
 >;
 
+export interface PostCardMetrics {
+  post_id: string;
+  like_count: number;
+  comment_count: number;
+  viewer_liked: boolean;
+  viewer_reported: boolean;
+}
+
+export interface InboxConversationRow {
+  id: string;
+  user_a: string;
+  user_b: string;
+  last_message: string;
+  last_message_at: string;
+  unread_count: number;
+  is_mentor: boolean;
+}
+
+type ScaleRpcDefinitions = {
+  get_connect_candidates: {
+    args: { _after_id: string | null; _limit: number };
+    row: MiniProfile & { is_banned: boolean; is_private: boolean };
+  };
+  get_my_conversation_page: {
+    args: {
+      _before_id: string | null;
+      _before_last_message_at: string | null;
+      _conversation_id: string | null;
+      _limit: number;
+    };
+    row: InboxConversationRow;
+  };
+  get_post_card_metrics: {
+    args: { _post_ids: string[] };
+    row: PostCardMetrics;
+  };
+};
+
+type ScaleRpcResult<T> = { data: T[] | null; error: { message: string } | null };
+
+async function callScaleRpc<K extends keyof ScaleRpcDefinitions>(
+  name: K,
+  args: ScaleRpcDefinitions[K]["args"],
+): Promise<ScaleRpcResult<ScaleRpcDefinitions[K]["row"]>> {
+  const rpc = supabase.rpc as unknown as <Name extends keyof ScaleRpcDefinitions>(
+    functionName: Name,
+    parameters: ScaleRpcDefinitions[Name]["args"],
+  ) => PromiseLike<ScaleRpcResult<ScaleRpcDefinitions[Name]["row"]>>;
+  return await rpc(name, args);
+}
+
+export function fetchConnectCandidates(afterId: string | null, limit: number) {
+  return callScaleRpc("get_connect_candidates", { _after_id: afterId, _limit: limit });
+}
+
+export function fetchMyConversationPage(
+  args: ScaleRpcDefinitions["get_my_conversation_page"]["args"],
+) {
+  return callScaleRpc("get_my_conversation_page", args);
+}
+
 const PULSE_STREAK_KEY = "mku_pulse_streak";
 
 interface PulseStreakRecord {
@@ -114,6 +175,23 @@ export async function fetchProfiles(ids: string[]): Promise<Record<string, MiniP
   const map: Record<string, MiniProfile> = {};
   for (const row of (data ?? []) as MiniProfile[]) map[row.id] = row;
   return map;
+}
+
+/** Fetch interaction counts and viewer flags for a page of posts in one request. */
+export async function fetchPostCardMetrics(
+  postIds: string[],
+): Promise<Record<string, PostCardMetrics> | null> {
+  const uniqueIds = [...new Set(postIds)].filter(Boolean).slice(0, 100);
+  if (uniqueIds.length === 0) return {};
+  try {
+    const { data, error } = await callScaleRpc("get_post_card_metrics", {
+      _post_ids: uniqueIds,
+    });
+    if (error) return null;
+    return Object.fromEntries((data ?? []).map((row) => [row.post_id, row]));
+  } catch {
+    return null;
+  }
 }
 
 /** Find (or create) the 1:1 conversation between two users. */
