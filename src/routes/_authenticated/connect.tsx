@@ -51,6 +51,8 @@ type SwipeAction = "like" | "pass" | "super_like";
 type ChangeableSwipeAction = "like" | "pass";
 type ConnectTab = "discover" | "matches" | "history";
 const CANDIDATE_PAGE_SIZE = 20;
+// Keep candidate reads batched while limiting the visible/interactive stack.
+const MAX_VISIBLE_PROFILES = 5;
 const SWIPE_EXIT_FALLBACK_MS = 520;
 
 interface SwipeRow {
@@ -271,6 +273,7 @@ function ConnectPage() {
   }, [user?.id, loadMatches, tab]);
 
   const current = deck[0];
+  const visibleStack = deck.slice(0, MAX_VISIBLE_PROFILES);
   const compatibility = current
     ? calculateRoommateCompatibility(
         profile?.interests,
@@ -521,152 +524,187 @@ function ConnectPage() {
                 </div>
               ) : (
                 <div
-                  className="relative w-full max-w-sm touch-pan-y select-none overflow-hidden rounded-3xl border border-border bg-card shadow-sm"
-                  style={{
-                    transform: `translate3d(${dragX}px, 0, 0) rotate(${Math.max(-22, Math.min(22, dragX / 16))}deg)`,
-                    transition: dragging
-                      ? "none"
-                      : exitAction
-                        ? "transform 420ms cubic-bezier(0.18, 0.72, 0.24, 1)"
-                        : "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
-                    touchAction: "pan-y",
-                    pointerEvents: exitAction ? "none" : "auto",
-                  }}
-                  onPointerDown={onPointerDown}
-                  onPointerMove={onPointerMove}
-                  onPointerUp={onPointerUp}
-                  onPointerCancel={() => {
-                    if (pendingSwipe.current) return;
-                    dragStart.current = null;
-                    setDragging(false);
-                    setDragX(0);
-                  }}
-                  onTransitionEnd={(event) => {
-                    if (
-                      event.target === event.currentTarget &&
-                      event.propertyName === "transform"
-                    ) {
-                      finishSwipeAnimation();
-                    }
-                  }}
-                  onClickCapture={(event) => {
-                    if (suppressClick.current) {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      suppressClick.current = false;
-                    }
-                  }}
+                  className="grid w-full max-w-sm"
+                  style={{ paddingBottom: `${(visibleStack.length - 1) * 8}px` }}
+                  role="group"
+                  aria-label={`${visibleStack.length} profiles in the swipe stack`}
                 >
-                  {(dragX > 12 || exitAction === "like" || exitAction === "super_like") && (
-                    <span
-                      className="pointer-events-none absolute left-5 top-5 z-10 rotate-[-12deg] rounded-lg border-2 border-emerald-500 bg-emerald-500/90 px-3 py-1 text-lg font-black tracking-widest text-white shadow-lg"
-                      style={{
-                        opacity: exitAction ? 1 : Math.min(1, dragX / 90),
-                        transform: `scale(${exitAction ? 1.08 : Math.min(1.08, 0.88 + dragX / 450)})`,
-                        transition: "opacity 120ms ease-out, transform 120ms ease-out",
-                      }}
-                    >
-                      {exitAction === "super_like" ? "SUPER LIKE" : "LIKE"}
-                    </span>
-                  )}
-                  {(dragX < -12 || exitAction === "pass") && (
-                    <span
-                      className="pointer-events-none absolute right-5 top-5 z-10 rotate-[12deg] rounded-lg border-2 border-red-500 bg-red-500/90 px-3 py-1 text-lg font-black tracking-widest text-white shadow-lg"
-                      style={{
-                        opacity: exitAction ? 1 : Math.min(1, Math.abs(dragX) / 90),
-                        transform: `scale(${exitAction ? 1.08 : Math.min(1.08, 0.88 + Math.abs(dragX) / 450)})`,
-                        transition: "opacity 120ms ease-out, transform 120ms ease-out",
-                      }}
-                    >
-                      PASS
-                    </span>
-                  )}
-                  <Link
-                    to="/u/$id"
-                    params={{ id: current.id }}
-                    aria-label={`View ${current.full_name}'s profile`}
-                    draggable={false}
-                  >
-                    {current.avatar_url ? (
-                      <StoredImage
-                        bucket="avatars"
-                        path={current.avatar_url}
-                        alt={current.full_name}
-                        className="h-96 w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-96 items-center justify-center bg-secondary">
-                        <UserAvatar path={null} name={current.full_name} className="size-24" />
-                      </div>
-                    )}
-                  </Link>
-                  <div className="p-4">
-                    <Link to="/u/$id" params={{ id: current.id }}>
-                      <h2 className="font-display text-lg font-bold hover:underline">
-                        {current.full_name}
-                      </h2>
-                    </Link>
-                    <p className="text-sm text-muted-foreground">
-                      Year {current.year_of_study} · {current.major || "Student"}
-                    </p>
-                    {current.bio && <p className="mt-2 text-sm">{current.bio}</p>}
-                    {compatibility && (
-                      <div className="mt-3 space-y-2">
-                        <Badge className="border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">
-                          🏠 {compatibility.percentage}% Roommate / Campus Match
-                        </Badge>
-                        {compatibility.sharedInterests.length > 0 && (
-                          <div
-                            className="flex flex-wrap items-center gap-1.5"
-                            aria-label="Shared interests"
-                          >
-                            <span className="text-xs text-muted-foreground">Shared:</span>
-                            {compatibility.sharedInterests.map((interest) => (
-                              <Badge key={interest} variant="outline" className="text-xs">
-                                #{interest.replace(/\s+/g, "")}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {(current.interests ?? []).slice(0, 6).map((interest) => (
-                        <Badge key={interest} variant="secondary">
-                          {interest}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="mt-4 flex items-center justify-center gap-3">
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        className="size-14 rounded-full p-0"
-                        aria-label="Pass"
-                        onClick={() => beginSwipeAnimation("pass", -1)}
+                  {visibleStack.slice(1).map((person, index) => {
+                    const depth = index + 1;
+                    return (
+                      <div
+                        key={person.id}
+                        aria-hidden="true"
+                        className="pointer-events-none col-start-1 row-start-1 min-w-0 overflow-hidden rounded-3xl border border-border bg-card shadow-sm"
+                        style={{
+                          gridArea: "1 / 1 / 2 / 2",
+                          zIndex: MAX_VISIBLE_PROFILES - depth,
+                          transform: `translate3d(0, ${depth * 8}px, 0) scale(${1 - depth * 0.02})`,
+                          transformOrigin: "top center",
+                        }}
                       >
-                        <X className="size-6" aria-hidden="true" />
-                      </Button>
-                      {limits.superLikesPerDay > 0 && (
+                        <div className="flex h-96 items-center justify-center bg-secondary">
+                          <UserAvatar path={null} name={person.full_name} className="size-24" />
+                        </div>
+                        <div className="p-4">
+                          <h2 className="font-display text-lg font-bold">{person.full_name}</h2>
+                          <p className="text-sm text-muted-foreground">
+                            Year {person.year_of_study} · {person.major || "Student"}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div
+                    className="relative col-start-1 row-start-1 w-full touch-pan-y select-none overflow-hidden rounded-3xl border border-border bg-card shadow-sm"
+                    style={{
+                      gridArea: "1 / 1 / 2 / 2",
+                      zIndex: MAX_VISIBLE_PROFILES + 1,
+                      transform: `translate3d(${dragX}px, 0, 0) rotate(${Math.max(-22, Math.min(22, dragX / 16))}deg)`,
+                      transition: dragging
+                        ? "none"
+                        : exitAction
+                          ? "transform 420ms cubic-bezier(0.18, 0.72, 0.24, 1)"
+                          : "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
+                      touchAction: "pan-y",
+                      pointerEvents: exitAction ? "none" : "auto",
+                    }}
+                    onPointerDown={onPointerDown}
+                    onPointerMove={onPointerMove}
+                    onPointerUp={onPointerUp}
+                    onPointerCancel={() => {
+                      if (pendingSwipe.current) return;
+                      dragStart.current = null;
+                      setDragging(false);
+                      setDragX(0);
+                    }}
+                    onTransitionEnd={(event) => {
+                      if (
+                        event.target === event.currentTarget &&
+                        event.propertyName === "transform"
+                      ) {
+                        finishSwipeAnimation();
+                      }
+                    }}
+                    onClickCapture={(event) => {
+                      if (suppressClick.current) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        suppressClick.current = false;
+                      }
+                    }}
+                  >
+                    {(dragX > 12 || exitAction === "like" || exitAction === "super_like") && (
+                      <span
+                        className="pointer-events-none absolute left-5 top-5 z-10 rotate-[-12deg] rounded-lg border-2 border-emerald-500 bg-emerald-500/90 px-3 py-1 text-lg font-black tracking-widest text-white shadow-lg"
+                        style={{
+                          opacity: exitAction ? 1 : Math.min(1, dragX / 90),
+                          transform: `scale(${exitAction ? 1.08 : Math.min(1.08, 0.88 + dragX / 450)})`,
+                          transition: "opacity 120ms ease-out, transform 120ms ease-out",
+                        }}
+                      >
+                        {exitAction === "super_like" ? "SUPER LIKE" : "LIKE"}
+                      </span>
+                    )}
+                    {(dragX < -12 || exitAction === "pass") && (
+                      <span
+                        className="pointer-events-none absolute right-5 top-5 z-10 rotate-[12deg] rounded-lg border-2 border-red-500 bg-red-500/90 px-3 py-1 text-lg font-black tracking-widest text-white shadow-lg"
+                        style={{
+                          opacity: exitAction ? 1 : Math.min(1, Math.abs(dragX) / 90),
+                          transform: `scale(${exitAction ? 1.08 : Math.min(1.08, 0.88 + Math.abs(dragX) / 450)})`,
+                          transition: "opacity 120ms ease-out, transform 120ms ease-out",
+                        }}
+                      >
+                        PASS
+                      </span>
+                    )}
+                    <Link
+                      to="/u/$id"
+                      params={{ id: current.id }}
+                      aria-label={`View ${current.full_name}'s profile`}
+                      draggable={false}
+                    >
+                      {current.avatar_url ? (
+                        <StoredImage
+                          bucket="avatars"
+                          path={current.avatar_url}
+                          alt={current.full_name}
+                          className="h-96 w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-96 items-center justify-center bg-secondary">
+                          <UserAvatar path={null} name={current.full_name} className="size-24" />
+                        </div>
+                      )}
+                    </Link>
+                    <div className="p-4">
+                      <Link to="/u/$id" params={{ id: current.id }}>
+                        <h2 className="font-display text-lg font-bold hover:underline">
+                          {current.full_name}
+                        </h2>
+                      </Link>
+                      <p className="text-sm text-muted-foreground">
+                        Year {current.year_of_study} · {current.major || "Student"}
+                      </p>
+                      {current.bio && <p className="mt-2 text-sm">{current.bio}</p>}
+                      {compatibility && (
+                        <div className="mt-3 space-y-2">
+                          <Badge className="border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">
+                            🏠 {compatibility.percentage}% Roommate / Campus Match
+                          </Badge>
+                          {compatibility.sharedInterests.length > 0 && (
+                            <div
+                              className="flex flex-wrap items-center gap-1.5"
+                              aria-label="Shared interests"
+                            >
+                              <span className="text-xs text-muted-foreground">Shared:</span>
+                              {compatibility.sharedInterests.map((interest) => (
+                                <Badge key={interest} variant="outline" className="text-xs">
+                                  #{interest.replace(/\s+/g, "")}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {(current.interests ?? []).slice(0, 6).map((interest) => (
+                          <Badge key={interest} variant="secondary">
+                            {interest}
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="mt-4 flex items-center justify-center gap-3">
                         <Button
                           variant="outline"
                           size="lg"
-                          className="size-14 rounded-full border-accent p-0 text-accent"
-                          aria-label="Super like"
-                          onClick={() => beginSwipeAnimation("super_like", 1)}
-                          disabled={outOfSuperLikes}
+                          className="size-14 rounded-full p-0"
+                          aria-label="Pass"
+                          onClick={() => beginSwipeAnimation("pass", -1)}
                         >
-                          <Star className="size-6" aria-hidden="true" />
+                          <X className="size-6" aria-hidden="true" />
                         </Button>
-                      )}
-                      <Button
-                        size="lg"
-                        className="size-16 rounded-full p-0"
-                        aria-label="Like"
-                        onClick={() => beginSwipeAnimation("like", 1)}
-                      >
-                        <Heart className="size-7" aria-hidden="true" />
-                      </Button>
+                        {limits.superLikesPerDay > 0 && (
+                          <Button
+                            variant="outline"
+                            size="lg"
+                            className="size-14 rounded-full border-accent p-0 text-accent"
+                            aria-label="Super like"
+                            onClick={() => beginSwipeAnimation("super_like", 1)}
+                            disabled={outOfSuperLikes}
+                          >
+                            <Star className="size-6" aria-hidden="true" />
+                          </Button>
+                        )}
+                        <Button
+                          size="lg"
+                          className="size-16 rounded-full p-0"
+                          aria-label="Like"
+                          onClick={() => beginSwipeAnimation("like", 1)}
+                        >
+                          <Heart className="size-7" aria-hidden="true" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
