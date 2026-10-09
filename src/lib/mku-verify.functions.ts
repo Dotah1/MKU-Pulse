@@ -25,7 +25,7 @@ async function requireAdmin(context: { supabase: any; userId: string }) {
 /** Student: get (or reuse) their personal code for the email they will send from. */
 export const requestMkuCode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ email: z.string().trim().toLowerCase().max(120) }).parse(d))
+  .validator((d) => z.object({ email: z.string().trim().toLowerCase().max(120) }).parse(d))
   .handler(async ({ data, context }) => {
     if (!MKU_DOMAIN_RE.test(data.email)) throw new Error("Use your @mylife.mku.ac.ke email");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -53,7 +53,7 @@ export const requestMkuCode = createServerFn({ method: "POST" })
 /** Admin: see which single account a code belongs to. */
 export const lookupMkuCode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ code: z.string().trim().toUpperCase() }).parse(d))
+  .validator((d) => z.object({ code: z.string().trim().toUpperCase() }).parse(d))
   .handler(async ({ data, context }) => {
     await requireAdmin(context);
     if (!CODE_RE.test(data.code)) throw new Error("Codes look like MKU-AB12CD");
@@ -83,7 +83,7 @@ export const lookupMkuCode = createServerFn({ method: "POST" })
 /** Admin: approve a code — verifies only the account that owns it. */
 export const approveMkuCode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ code: z.string().trim().toUpperCase() }).parse(d))
+  .validator((d) => z.object({ code: z.string().trim().toUpperCase() }).parse(d))
   .handler(async ({ data, context }) => {
     await requireAdmin(context);
     if (!CODE_RE.test(data.code)) throw new Error("Invalid code");
