@@ -59,7 +59,13 @@ export function CampusProvider({ children }: { children: ReactNode }) {
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo>(DEFAULT_PAYMENT_INFO);
 
   const loadProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    const { data } = await supabase
+      .from("profiles")
+      .select(
+        "id, full_name, year_of_study, major, avatar_url, bio, interests, gender, tier, tier_expires_at, pending_tier, is_banned, post_block_until, notifications_enabled, is_private, created_at",
+      )
+      .eq("id", userId)
+      .maybeSingle();
     const p = (data as Profile | null) ?? null;
     setProfile(p);
     // Auto-downgrade once a paid tier has lapsed.
@@ -117,6 +123,54 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
+    };
+  }, [loadSettings]);
+
+  useEffect(() => {
+    const idleDisconnectMs = 2 * 60 * 1000;
+    let idleTimer: number | null = null;
+    let disconnectPending: Promise<unknown> | null = null;
+    let needsReconnect = false;
+
+    const clearIdleTimer = () => {
+      if (idleTimer === null) return;
+      window.clearTimeout(idleTimer);
+      idleTimer = null;
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        clearIdleTimer();
+        idleTimer = window.setTimeout(() => {
+          idleTimer = null;
+          if (document.visibilityState !== "hidden") return;
+          needsReconnect = true;
+          disconnectPending = supabase.realtime.disconnect().catch((error: unknown) => {
+            console.warn("Could not suspend the idle Realtime connection", error);
+          });
+        }, idleDisconnectMs);
+        return;
+      }
+
+      clearIdleTimer();
+      if (!needsReconnect) return;
+      void (async () => {
+        await disconnectPending;
+        disconnectPending = null;
+        if (document.visibilityState !== "visible") return;
+        supabase.realtime.connect();
+        needsReconnect = false;
+        await loadSettings();
+      })().catch((error: unknown) => {
+        console.warn("Could not resume the Realtime connection", error);
+      });
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    if (document.visibilityState === "hidden") handleVisibilityChange();
+    return () => {
+      clearIdleTimer();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [loadSettings]);
 

@@ -159,12 +159,23 @@ function MessagesPage() {
   }, [c, conversations, load, user?.id]);
 
   useEffect(() => {
+    if (!user?.id || c) return;
+    const refreshInboxWhenVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", refreshInboxWhenVisible);
+    return () => document.removeEventListener("visibilitychange", refreshInboxWhenVisible);
+  }, [c, load, user?.id]);
+
+  useEffect(() => {
     if (!user?.id) return;
     if (c) setUnreadCounts((current) => ({ ...current, [c]: 0 }));
   }, [c, user?.id]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    // The open conversation has its own filtered channel; keep the broad inbox
+    // listener only while the conversation list is visible.
+    if (!user?.id || c) return;
     const channel = supabase
       .channel(`inbox-${user.id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
@@ -369,6 +380,7 @@ function ChatPane({
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [draft, setDraft] = useState("");
   const [otherTyping, setOtherTyping] = useState(false);
+  const typingTimeout = useRef<number | null>(null);
   const [replyTo, setReplyTo] = useState<MessageRow | null>(null);
   const [postDraft, setPostDraft] = useState<PostRef | null>(null);
   const [linkedPosts, setLinkedPosts] = useState<Record<string, PostRef>>({});
@@ -734,8 +746,12 @@ function ChatPane({
           (payload) => {
             const row = payload.new as { user_id?: string; updated_at?: string } | null;
             if (!row?.user_id || row.user_id === user?.id) return;
+            if (typingTimeout.current !== null) window.clearTimeout(typingTimeout.current);
             setOtherTyping(true);
-            window.setTimeout(() => setOtherTyping(false), 3000);
+            typingTimeout.current = window.setTimeout(() => {
+              typingTimeout.current = null;
+              setOtherTyping(false);
+            }, 4500);
           },
         )
         .subscribe((status) => {
@@ -760,6 +776,10 @@ function ChatPane({
       disposed = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       removeActiveChannel();
+      if (typingTimeout.current !== null) {
+        window.clearTimeout(typingTimeout.current);
+        typingTimeout.current = null;
+      }
     };
   }, [conversation.id, user?.id, load, loadPostRef, appendMessage, markConversationRead]);
 
@@ -768,7 +788,7 @@ function ChatPane({
     setDraft(value);
     if (!user) return;
     const now = Date.now();
-    if (now - lastTyped.current < 1500) return;
+    if (now - lastTyped.current < 3000) return;
     lastTyped.current = now;
     void supabase.from("typing_state").upsert({
       conversation_id: conversation.id,
