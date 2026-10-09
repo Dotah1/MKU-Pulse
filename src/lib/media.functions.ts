@@ -14,7 +14,7 @@ async function deleteMediaPaths(paths: string[]) {
   }
 
   if (r2Paths.length > 0) {
-    const workerUrl = process.env["R2_MEDIA_WORKER_URL"]?.replace(/\/$/, "");
+    const workerUrl = process.env["VITE_R2_MEDIA_WORKER_URL"]?.replace(/\/$/, "");
     const authorization = getRequest()?.headers.get("authorization");
     if (!workerUrl || !authorization) throw new Error("R2 media cleanup is not configured");
     for (const path of r2Paths) {

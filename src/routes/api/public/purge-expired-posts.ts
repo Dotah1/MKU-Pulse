@@ -54,7 +54,26 @@ async function purgeExpiredPosts(request: Request): Promise<Response> {
       const paths = rows
         .flatMap((post) => [post.image_url, post.video_url])
         .filter((path): path is string => Boolean(path));
+      const r2Paths = paths.filter((path) => path.startsWith("r2:"));
       const supabasePaths = paths.filter((path) => !path.startsWith("r2:"));
+
+      if (r2Paths.length > 0) {
+        const workerUrl = process.env["VITE_R2_MEDIA_WORKER_URL"]?.replace(/\/$/, "");
+        const cleanupSecret = process.env["R2_MEDIA_CLEANUP_SECRET"];
+        if (!workerUrl || !cleanupSecret) {
+          throw new Error("R2 media cleanup is not configured");
+        }
+        const response = await fetch(`${workerUrl}/internal/delete-media`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${cleanupSecret}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ paths: r2Paths }),
+        });
+        if (!response.ok) throw new Error("Could not delete R2 media");
+      }
+
       if (supabasePaths.length > 0) {
         const { error: storageError } = await supabaseAdmin.storage
           .from("media")

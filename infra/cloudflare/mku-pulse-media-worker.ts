@@ -3,10 +3,12 @@ interface Env {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   MEDIA_SIGNING_SECRET: string;
+  R2_MEDIA_CLEANUP_SECRET: string;
 }
 
 const ALLOWED_BUCKETS = new Set(["avatars", "media"]);
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_CLEANUP_PATHS = 200;
 const TOKEN_TTL_SECONDS = 60 * 60;
 
 function corsHeaders(origin: string | null): Headers {
@@ -34,6 +36,15 @@ function json(data: unknown, status = 200, origin: string | null = null): Respon
 
 function unauthorized(origin: string | null): Response {
   return json({ error: "Unauthorized" }, 401, origin);
+}
+
+function constantTimeEqual(received: string, expected: string): boolean {
+  if (!received || received.length !== expected.length) return false;
+  let difference = 0;
+  for (let index = 0; index < expected.length; index += 1) {
+    difference |= received.charCodeAt(index) ^ expected.charCodeAt(index);
+  }
+  return difference === 0;
 }
 
 async function authenticate(request: Request, env: Env): Promise<string | null> {
@@ -105,6 +116,40 @@ function decodeR2Path(value: string): string | null {
   return path;
 }
 
+async function deleteExpiredMedia(request: Request, env: Env): Promise<Response> {
+  const expectedSecret = env.R2_MEDIA_CLEANUP_SECRET;
+  if (!expectedSecret) return json({ error: "Cleanup is not configured" }, 503);
+  const authorization = request.headers.get("Authorization") ?? "";
+  const suppliedSecret = authorization.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
+  if (!constantTimeEqual(suppliedSecret, expectedSecret)) return unauthorized(null);
+
+  let body: { paths?: unknown };
+  try {
+    body = (await request.json()) as { paths?: unknown };
+  } catch {
+    return json({ error: "Invalid request body" }, 400);
+  }
+  if (
+    !Array.isArray(body.paths) ||
+    body.paths.length === 0 ||
+    body.paths.length > MAX_CLEANUP_PATHS
+  ) {
+    return json({ error: "Invalid media path list" }, 400);
+  }
+
+  if (body.paths.some((value) => typeof value !== "string")) {
+    return json({ error: "Invalid media path list" }, 400);
+  }
+  const paths = [...new Set(body.paths as string[])];
+  const objectKeys = paths.map((value) => decodeR2Path(value));
+  if (objectKeys.some((path) => !path?.startsWith("media/"))) {
+    return json({ error: "Invalid media path list" }, 400);
+  }
+
+  await env.MEDIA.delete(objectKeys as string[]);
+  return json({ deleted: objectKeys.length });
+}
+
 function extensionFor(file: File): string {
   const extensions: Record<string, string> = {
     "image/jpeg": "jpg",
@@ -123,6 +168,9 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return new Response(null, { status: 204, headers: corsHeaders(origin) });
   if (url.pathname === "/health" && request.method === "GET")
     return json({ ok: true, bucket: "mku-pulse-media" }, 200, origin);
+  if (url.pathname === "/internal/delete-media" && request.method === "POST") {
+    return deleteExpiredMedia(request, env);
+  }
 
   if (url.pathname === "/upload" && request.method === "POST") {
     const userId = await authenticate(request, env);
@@ -190,8 +238,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
     if (!userId) return unauthorized(origin);
     const markedPath = url.searchParams.get("path") ?? "";
     const path = decodeR2Path(markedPath);
-    if (!path || !path.split("/")[1]?.startsWith(userId))
-      return json({ error: "Invalid path" }, 400, origin);
+    if (!path || path.split("/")[1] !== userId) return json({ error: "Invalid path" }, 400, origin);
     await env.MEDIA.delete(path);
     return json({ ok: true }, 200, origin);
   }
