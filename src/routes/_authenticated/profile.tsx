@@ -442,7 +442,7 @@ function ProfilePage() {
             <Label htmlFor="p-year">Year of study</Label>
             <Select value={year} onValueChange={setYear}>
               <SelectTrigger id="p-year" className="mt-1 min-h-11">
-                <SelectValue />
+                <SelectValue>{`Year ${year}`}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {YEAR_OPTIONS.map((y) => (
@@ -457,7 +457,9 @@ function ProfilePage() {
             <Label htmlFor="p-gender">Gender</Label>
             <Select value={gender} onValueChange={(v) => setGender(v as Gender)}>
               <SelectTrigger id="p-gender" className="mt-1 min-h-11">
-                <SelectValue placeholder="Select" />
+                <SelectValue placeholder="Select">
+                  {GENDER_OPTIONS.find((option) => option.value === gender)?.label}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {GENDER_OPTIONS.map((g) => (
