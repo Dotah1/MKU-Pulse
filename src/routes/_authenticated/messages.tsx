@@ -965,10 +965,10 @@ function ChatPane({
         aria-label="Message retention policy"
         className="shrink-0 border-b border-border bg-muted/40 px-4 py-2 text-xs leading-relaxed text-muted-foreground"
       >
-        Messages older than 90 days are deleted only when both participants are on the free plan.
-        Shared history is kept while either participant has an active paid plan and for 30 days
-        after the last paid plan expires. Messages linked to pending or approved safety reports are
-        retained.
+        When both participants are on the free plan, messages older than 30 days are deleted. Shared
+        history is kept while either participant has an active paid plan. After the last paid plan
+        expires, there is a 30-day grace period; then messages older than 90 days are eligible for
+        deletion. Messages linked to pending or approved safety reports are retained.
       </div>
 
       <div ref={messageList} className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
