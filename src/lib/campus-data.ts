@@ -50,7 +50,7 @@ async function callScaleRpc<K extends keyof ScaleRpcDefinitions>(
   name: K,
   args: ScaleRpcDefinitions[K]["args"],
 ): Promise<ScaleRpcResult<ScaleRpcDefinitions[K]["row"]>> {
-  const rpc = supabase.rpc as unknown as <Name extends keyof ScaleRpcDefinitions>(
+  const rpc = supabase.rpc.bind(supabase) as unknown as <Name extends keyof ScaleRpcDefinitions>(
     functionName: Name,
     parameters: ScaleRpcDefinitions[Name]["args"],
   ) => PromiseLike<ScaleRpcResult<ScaleRpcDefinitions[Name]["row"]>>;
