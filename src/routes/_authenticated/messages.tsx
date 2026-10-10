@@ -466,7 +466,6 @@ function ChatPane({
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [draft, setDraft] = useState("");
-  const [otherTyping, setOtherTyping] = useState(false);
   const [replyTo, setReplyTo] = useState<MessageRow | null>(null);
   const [postDraft, setPostDraft] = useState<PostRef | null>(null);
   const [linkedPosts, setLinkedPosts] = useState<Record<string, PostRef>>({});
@@ -821,21 +820,6 @@ function ChatPane({
             void load();
           },
         )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "typing_state",
-            filter: `conversation_id=eq.${conversation.id}`,
-          },
-          (payload) => {
-            const row = payload.new as { user_id?: string; updated_at?: string } | null;
-            if (!row?.user_id || row.user_id === user?.id) return;
-            setOtherTyping(true);
-            window.setTimeout(() => setOtherTyping(false), 3000);
-          },
-        )
         .subscribe((status) => {
           if (disposed || activeChannel !== channel) return;
           if (status === "SUBSCRIBED") void load();
@@ -859,18 +843,8 @@ function ChatPane({
     };
   }, [conversation.id, user?.id, load, loadPostRef, appendMessage, markConversationRead]);
 
-  const lastTyped = useRef(0);
   const onType = (value: string) => {
     setDraft(value);
-    if (!user) return;
-    const now = Date.now();
-    if (now - lastTyped.current < 1500) return;
-    lastTyped.current = now;
-    void supabase.from("typing_state").upsert({
-      conversation_id: conversation.id,
-      user_id: user.id,
-      updated_at: new Date().toISOString(),
-    });
   };
 
   const send = async () => {
@@ -946,9 +920,7 @@ function ChatPane({
               {other?.full_name ?? "Student"}
             </p>
           </Link>
-          <p className="truncate text-xs text-muted-foreground">
-            {otherTyping ? "typing…" : other?.major || "MKU Pulse"}
-          </p>
+          <p className="truncate text-xs text-muted-foreground">{other?.major || "MKU Pulse"}</p>
         </div>
         {currentUserId && (
           <SafetyMenu
@@ -1061,7 +1033,6 @@ function ChatPane({
             </div>
           );
         })}
-        {otherTyping && <p className="text-xs text-muted-foreground">typing…</p>}
         <div ref={bottom} />
       </div>
 

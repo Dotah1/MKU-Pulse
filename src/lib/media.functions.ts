@@ -27,6 +27,38 @@ async function deleteMediaPaths(paths: string[]) {
   }
 }
 
+/** Remove an uploaded object if its post insert is rejected before it can be attached. */
+export const deleteUnattachedMedia = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data) => z.object({ path: z.string().min(1).max(512) }).parse(data))
+  .handler(async ({ data, context }) => {
+    const ownedPrefix = `${context.userId}/`;
+    const ownedR2Prefix = `r2:${ownedPrefix}`;
+    if (
+      (!data.path.startsWith(ownedPrefix) && !data.path.startsWith(ownedR2Prefix)) ||
+      data.path.includes("..") ||
+      data.path.endsWith("/")
+    ) {
+      throw new Error("You can only remove your own unattached upload");
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [profile, postImage, postVideo, poll, announcement] = await Promise.all([
+      supabaseAdmin.from("profiles").select("id").eq("avatar_url", data.path).limit(1),
+      supabaseAdmin.from("posts").select("id").eq("image_url", data.path).limit(1),
+      supabaseAdmin.from("posts").select("id").eq("video_url", data.path).limit(1),
+      supabaseAdmin.from("polls").select("id").eq("image_url", data.path).limit(1),
+      supabaseAdmin.from("notifications").select("id").ilike("url", `%${data.path}%`).limit(1),
+    ]);
+    if ([profile, postImage, postVideo, poll, announcement].some((result) => result.error)) {
+      throw new Error("Could not verify whether the upload is already in use");
+    }
+    if ([profile, postImage, postVideo, poll, announcement].some((result) => result.data?.length)) {
+      return { ok: false };
+    }
+    await deleteMediaPaths([data.path]);
+    return { ok: true };
+  });
+
 /**
  * Delete a post together with any picture or video it carries, so nothing is
  * left behind in storage.

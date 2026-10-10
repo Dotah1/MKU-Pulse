@@ -101,22 +101,20 @@ export function PollCard({
 
   useEffect(() => {
     if (!isNearViewport || closed) return;
-    const channel = supabase
-      .channel(`poll-${poll.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "poll_votes", filter: `poll_id=eq.${poll.id}` },
-        scheduleLoad,
-      )
-      .subscribe();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") scheduleLoad();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
       if (refreshTimer.current !== null) {
         window.clearTimeout(refreshTimer.current);
         refreshTimer.current = null;
       }
-      void supabase.removeChannel(channel);
     };
-  }, [poll.id, scheduleLoad, isNearViewport, closed]);
+  }, [scheduleLoad, isNearViewport, closed]);
 
   const vote = async (optionId: string) => {
     if (!user || closed) return;

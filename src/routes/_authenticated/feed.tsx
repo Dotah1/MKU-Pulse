@@ -12,13 +12,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { CampusToolsDialog } from "@/components/CampusToolsDialog";
+import { deleteUnattachedMedia } from "@/lib/media.functions";
 import { POST_MEDIA_MAX_BYTES, POST_VIDEO_MAX_SECONDS, sanitizeText } from "@/lib/campus";
 import { compressImageFile, compressVideoFile, uploadFile, videoDuration } from "@/lib/storage";
 import {
   checkAndUpdateStreak,
   checkInServerStreak,
   countToday,
+  fetchDailyUserQuotaUsage,
   fetchPostCardMetrics,
+  startOfToday,
   type PostCardMetrics,
 } from "@/lib/campus-data";
 
@@ -139,6 +142,7 @@ function FeedPage() {
   const [loadingMorePosts, setLoadingMorePosts] = useState(false);
   const [hasMorePosts, setHasMorePosts] = useState(true);
   const [usedToday, setUsedToday] = useState(0);
+  const [usedVideosToday, setUsedVideosToday] = useState(0);
   const [pulseStreak, setPulseStreak] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<FeedFilter>("all");
   const postsOffset = useRef(0);
@@ -299,10 +303,33 @@ function FeedPage() {
     };
   }, [user?.id, checkForNewPosts]);
 
+  const refreshQuotaUsage = useCallback(async () => {
+    if (!user?.id) return;
+    const { data, error } = await fetchDailyUserQuotaUsage();
+    const usage = data?.[0];
+    if (!error && usage) {
+      setUsedToday(usage.posts_count);
+      setUsedVideosToday(usage.videos_count);
+      return;
+    }
+
+    // Keep preview/older environments functional while the quota migration is rolling out.
+    const [postCount, videoCount] = await Promise.all([
+      countToday("posts", "user_id", user.id),
+      supabase
+        .from("posts")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .not("video_url", "is", null)
+        .gte("created_at", startOfToday()),
+    ]);
+    setUsedToday(postCount);
+    setUsedVideosToday(videoCount.count ?? 0);
+  }, [user?.id]);
+
   useEffect(() => {
-    if (!user) return;
-    void countToday("posts", "user_id", user.id).then(setUsedToday);
-  }, [user]);
+    void refreshQuotaUsage();
+  }, [refreshQuotaUsage]);
 
   useEffect(() => {
     setPulseStreak(checkAndUpdateStreak());
@@ -417,9 +444,10 @@ function FeedPage() {
           relistContent={relist}
           onPosted={() => {
             void load();
-            if (user) void countToday("posts", "user_id", user.id).then(setUsedToday);
+            void refreshQuotaUsage();
           }}
           usedToday={usedToday}
+          usedVideosToday={usedVideosToday}
         />
       )}
 
@@ -491,10 +519,12 @@ function FeedPage() {
 function Composer({
   onPosted,
   usedToday,
+  usedVideosToday,
   relistContent,
 }: {
   onPosted: () => void;
   usedToday: number;
+  usedVideosToday: number;
   relistContent: string | undefined;
 }) {
   const { user, profile, isAdmin, limits } = useCampus();
@@ -530,21 +560,11 @@ function Composer({
       toast.error("Video posts need Campus Socialite or Campus VIP");
       return;
     }
-    if (want === "video" && user) {
-      const since = new Date();
-      since.setHours(0, 0, 0, 0);
-      const { count } = await supabase
-        .from("posts")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .not("video_url", "is", null)
-        .gte("created_at", since.toISOString());
-      if ((count ?? 0) >= limits.videosPerDay) {
-        toast.error(
-          `You've used your ${limits.videosPerDay} video post${limits.videosPerDay === 1 ? "" : "s"} for today on the ${limits.label} plan`,
-        );
-        return;
-      }
+    if (want === "video" && usedVideosToday >= limits.videosPerDay) {
+      toast.error(
+        `You've used your ${limits.videosPerDay} video post${limits.videosPerDay === 1 ? "" : "s"} for today on the ${limits.label} plan`,
+      );
+      return;
     }
     setPreparing(true);
     setPreparingKind(want);
@@ -620,6 +640,7 @@ function Composer({
       return;
     }
     setBusy(true);
+    let uploadedPath: string | null = null;
     try {
       let imagePath: string | null = null;
       let videoPath: string | null = null;
@@ -632,6 +653,7 @@ function Composer({
         const path = await uploadFile("media", user.id, file, {
           alreadyCompressed: true,
         });
+        uploadedPath = path;
         if (kind === "image") imagePath = path;
         else videoPath = path;
       }
@@ -644,6 +666,7 @@ function Composer({
         is_announcement: isAdmin ? announcement : false,
       });
       if (error) throw error;
+      uploadedPath = null;
       saveRecentPostDraft(text);
       setContent("");
       setActiveCategory(null);
@@ -652,6 +675,13 @@ function Composer({
       toast.success("Posted");
       onPosted();
     } catch (err) {
+      if (uploadedPath) {
+        try {
+          await deleteUnattachedMedia({ data: { path: uploadedPath } });
+        } catch (cleanupError) {
+          console.warn("Could not remove media rejected with its post", cleanupError);
+        }
+      }
       toast.error(err instanceof Error ? err.message : "Could not publish that post");
     } finally {
       setBusy(false);

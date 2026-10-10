@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   calculateRoommateCompatibility,
   fetchConnectCandidates,
+  fetchDailyUserQuotaUsage,
   fetchProfiles,
   getOrCreateConversation,
   startOfToday,
@@ -99,19 +100,9 @@ function ConnectPage() {
     candidateCursor.current = null;
     queuedProfileIds.current = new Set<string>();
     seenProfileIds.current = new Set([user.id]);
-    const [candidateResult, swipeCountResult, superLikeCountResult] = await Promise.all([
+    const [candidateResult, quotaUsageResult] = await Promise.all([
       fetchConnectCandidates(null, CANDIDATE_PAGE_SIZE + 1),
-      supabase
-        .from("swipes")
-        .select("id", { count: "exact", head: true })
-        .eq("swiper_id", user.id)
-        .gte("created_at", startOfToday()),
-      supabase
-        .from("swipes")
-        .select("id", { count: "exact", head: true })
-        .eq("swiper_id", user.id)
-        .eq("action", "super_like")
-        .gte("created_at", startOfToday()),
+      fetchDailyUserQuotaUsage(),
     ]);
     const { data, error } = candidateResult;
     if (error) {
@@ -129,10 +120,30 @@ function ConnectPage() {
     queuedProfileIds.current = new Set(list.map((person) => person.id));
     setDeck(list.sort(() => Math.random() - 0.5));
     setHasMoreCandidates(fetched.length > CANDIDATE_PAGE_SIZE);
-    setSwipesToday(swipeCountResult.count ?? 0);
-    setSuperToday(superLikeCountResult.count ?? 0);
-    if (swipeCountResult.error) toast.error(swipeCountResult.error.message);
-    if (superLikeCountResult.error) toast.error(superLikeCountResult.error.message);
+    const quotaUsage = quotaUsageResult.data?.[0];
+    if (!quotaUsageResult.error && quotaUsage) {
+      setSwipesToday(quotaUsage.swipes_count);
+      setSuperToday(quotaUsage.super_likes_count);
+    } else {
+      // Fallback for previews where the quota migration has not yet been applied.
+      const [swipeCountResult, superLikeCountResult] = await Promise.all([
+        supabase
+          .from("swipes")
+          .select("id", { count: "exact", head: true })
+          .eq("swiper_id", user.id)
+          .gte("created_at", startOfToday()),
+        supabase
+          .from("swipes")
+          .select("id", { count: "exact", head: true })
+          .eq("swiper_id", user.id)
+          .eq("action", "super_like")
+          .gte("created_at", startOfToday()),
+      ]);
+      setSwipesToday(swipeCountResult.count ?? 0);
+      setSuperToday(superLikeCountResult.count ?? 0);
+      if (swipeCountResult.error) toast.error(swipeCountResult.error.message);
+      if (superLikeCountResult.error) toast.error(superLikeCountResult.error.message);
+    }
     setLoading(false);
   }, [user]);
 

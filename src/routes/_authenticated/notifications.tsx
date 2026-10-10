@@ -21,8 +21,19 @@ export const Route = createFileRoute("/_authenticated/notifications")({
 });
 
 function NotificationsPage() {
-  const { items, loading, error, unreadCount, markRead, markAllRead, reload } =
-    useNotifications(100);
+  const {
+    items,
+    loading,
+    error,
+    unreadCount,
+    markRead,
+    markAllRead,
+    reload,
+    loadMore,
+    hasMore,
+    loadingMore,
+    loadMoreError,
+  } = useNotifications(100);
 
   return (
     <div className="space-y-4">
@@ -92,6 +103,23 @@ function NotificationsPage() {
             </li>
           ))}
         </ul>
+      )}
+      {!loading && !error && hasMore && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            className="min-h-11"
+            disabled={loadingMore}
+            onClick={() => void loadMore()}
+          >
+            {loadingMore ? "Loading older notifications…" : "Load older notifications"}
+          </Button>
+        </div>
+      )}
+      {loadMoreError && (
+        <p role="alert" className="text-center text-sm text-destructive">
+          {loadMoreError}
+        </p>
       )}
     </div>
   );
