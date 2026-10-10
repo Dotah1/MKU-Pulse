@@ -17,17 +17,22 @@ interface AppNotification {
 interface NotificationSnapshot {
   items: AppNotification[];
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  loadMoreError: string | null;
   error: string | null;
 }
 
 const NOTIFICATION_PAGE_SIZE = 50;
-const MAX_NOTIFICATION_SCAN_PAGES = 10;
 const MAX_SHARED_ITEMS = 100;
 const REFRESH_INTERVAL_MS = 5 * 60_000;
 
 const EMPTY_SNAPSHOT: NotificationSnapshot = {
   items: [],
   loading: false,
+  loadingMore: false,
+  hasMore: false,
+  loadMoreError: null,
   error: null,
 };
 const EMPTY_SUBSCRIBE = () => () => undefined;
@@ -37,12 +42,16 @@ class NotificationStore {
   private snapshot: NotificationSnapshot = {
     items: [],
     loading: true,
+    loadingMore: false,
+    hasMore: false,
+    loadMoreError: null,
     error: null,
   };
   private listeners = new Set<() => void>();
   private channel: ReturnType<typeof supabase.channel> | null = null;
   private timer: number | null = null;
   private requestId = 0;
+  private loadMoreRequestId = 0;
   private started = false;
   private notificationsEnabled = true;
 
@@ -92,8 +101,26 @@ class NotificationStore {
             ) {
               playNotificationFeedback(notificationFeedbackKey(incoming.url, incoming.id));
             }
+            this.upsertNotification(incoming);
+            return;
           }
-          void this.load();
+
+          if (payload.eventType === "UPDATE") {
+            const incoming = payload.new as Partial<AppNotification>;
+            if (!incoming.id) return;
+            this.update({
+              items: this.snapshot.items.map((item) =>
+                item.id === incoming.id ? { ...item, ...incoming } : item,
+              ),
+            });
+            this.removeExpiredAnnouncements();
+            return;
+          }
+
+          if (payload.eventType === "DELETE") {
+            const id = (payload.old as Partial<AppNotification>).id;
+            if (id) this.update({ items: this.snapshot.items.filter((item) => item.id !== id) });
+          }
         },
       )
       .subscribe();
@@ -111,36 +138,86 @@ class NotificationStore {
     this.update({ loading: !hasItems, error: null });
 
     try {
-      const liveItems: AppNotification[] = [];
-      const pageSize = NOTIFICATION_PAGE_SIZE;
-      for (let page = 0; page < MAX_NOTIFICATION_SCAN_PAGES; page += 1) {
-        const offset = page * pageSize;
-        const { data, error: loadError } = await supabase
-          .from("notifications")
-          .select("id, kind, title, body, url, read_at, created_at")
-          .eq("user_id", this.userId)
-          .order("created_at", { ascending: false })
-          .order("id", { ascending: false })
-          .range(offset, offset + pageSize - 1);
-
-        if (requestId !== this.requestId) return;
-        if (loadError) throw loadError;
-        const pageItems = (data ?? []) as AppNotification[];
-        liveItems.push(
-          ...pageItems.filter(
-            (notification) =>
-              notification.kind !== "announcement" || !isAnnouncementExpired(notification.url),
-          ),
-        );
-        if (pageItems.length < pageSize || liveItems.length >= MAX_SHARED_ITEMS) break;
-      }
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("id, kind, title, body, url, read_at, created_at")
+        .eq("user_id", this.userId)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(NOTIFICATION_PAGE_SIZE);
 
       if (requestId !== this.requestId) return;
-      this.update({ items: liveItems.slice(0, MAX_SHARED_ITEMS), loading: false, error: null });
+      if (error) throw error;
+      const pageItems = ((data ?? []) as AppNotification[]).filter(
+        (notification) =>
+          notification.kind !== "announcement" || !isAnnouncementExpired(notification.url),
+      );
+      const merged = new Map(this.snapshot.items.map((item) => [item.id, item]));
+      for (const item of pageItems) merged.set(item.id, item);
+      const items = [...merged.values()]
+        .sort(
+          (left, right) =>
+            right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id),
+        )
+        .slice(0, MAX_SHARED_ITEMS);
+      this.update({
+        items,
+        hasMore: (data?.length ?? 0) === NOTIFICATION_PAGE_SIZE && items.length < MAX_SHARED_ITEMS,
+        loading: false,
+        error: null,
+      });
     } catch (loadError) {
       if (requestId !== this.requestId) return;
       console.error("Could not load notifications", loadError);
       this.update({ loading: false, error: "Notifications couldn’t load. Please try again." });
+    }
+  }
+
+  async loadMore() {
+    this.start();
+    if (this.snapshot.loadingMore || !this.snapshot.hasMore) return;
+    const cursor = this.snapshot.items.at(-1);
+    if (!cursor) return;
+
+    const requestId = ++this.loadMoreRequestId;
+    this.update({ loadingMore: true, loadMoreError: null });
+    try {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("id, kind, title, body, url, read_at, created_at")
+        .eq("user_id", this.userId)
+        .or(
+          `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`,
+        )
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(NOTIFICATION_PAGE_SIZE);
+      if (requestId !== this.loadMoreRequestId) return;
+      if (error) throw error;
+
+      const pageItems = ((data ?? []) as AppNotification[]).filter(
+        (notification) =>
+          notification.kind !== "announcement" || !isAnnouncementExpired(notification.url),
+      );
+      const merged = new Map(this.snapshot.items.map((item) => [item.id, item]));
+      for (const item of pageItems) merged.set(item.id, item);
+      const items = [...merged.values()]
+        .sort(
+          (left, right) =>
+            right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id),
+        )
+        .slice(0, MAX_SHARED_ITEMS);
+      this.update({
+        items,
+        hasMore: (data?.length ?? 0) === NOTIFICATION_PAGE_SIZE && items.length < MAX_SHARED_ITEMS,
+        loadMoreError: null,
+      });
+    } catch (loadError) {
+      if (requestId !== this.loadMoreRequestId) return;
+      console.error("Could not load older notifications", loadError);
+      this.update({ loadMoreError: "Older notifications couldn’t load. Please try again." });
+    } finally {
+      if (requestId === this.loadMoreRequestId) this.update({ loadingMore: false });
     }
   }
 
@@ -191,6 +268,29 @@ class NotificationStore {
     for (const listener of this.listeners) listener();
   }
 
+  private upsertNotification(incoming: Partial<AppNotification> & { user_id?: string }) {
+    if (
+      incoming.user_id !== this.userId ||
+      !incoming.id ||
+      typeof incoming.kind !== "string" ||
+      typeof incoming.title !== "string" ||
+      typeof incoming.body !== "string" ||
+      typeof incoming.created_at !== "string"
+    ) {
+      return;
+    }
+    if (incoming.kind === "announcement" && isAnnouncementExpired(incoming.url ?? null)) return;
+    const merged = new Map(this.snapshot.items.map((item) => [item.id, item]));
+    merged.set(incoming.id, incoming as AppNotification);
+    const items = [...merged.values()]
+      .sort(
+        (left, right) =>
+          right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id),
+      )
+      .slice(0, MAX_SHARED_ITEMS);
+    this.update({ items });
+  }
+
   private scheduleTimer() {
     if (this.timer !== null) window.clearInterval(this.timer);
     this.timer =
@@ -225,6 +325,7 @@ class NotificationStore {
     if (!this.started) return;
     this.started = false;
     this.requestId += 1;
+    this.loadMoreRequestId += 1;
     if (this.timer !== null) window.clearInterval(this.timer);
     this.timer = null;
     document.removeEventListener("visibilitychange", this.handleVisibilityChange);
@@ -265,6 +366,7 @@ export function useNotifications(limit = 30) {
     if (store) return store.load();
     return Promise.resolve();
   }, [store]);
+  const loadMore = useCallback(() => store?.loadMore() ?? Promise.resolve(), [store]);
   const markRead = useCallback((id: string) => store?.markRead(id) ?? Promise.resolve(), [store]);
   const markAllRead = useCallback(() => store?.markAllRead() ?? Promise.resolve(), [store]);
   const items = snapshot.items.slice(0, limit);
@@ -272,9 +374,13 @@ export function useNotifications(limit = 30) {
   return {
     items,
     loading: snapshot.loading,
+    loadingMore: snapshot.loadingMore,
+    hasMore: snapshot.hasMore,
+    loadMoreError: snapshot.loadMoreError,
     error: snapshot.error,
     unreadCount: items.filter((notification) => !notification.read_at).length,
     reload,
+    loadMore,
     markRead,
     markAllRead,
   };

@@ -42,6 +42,15 @@ type ScaleRpcDefinitions = {
     args: { _post_ids: string[] };
     row: PostCardMetrics;
   };
+  get_my_daily_quota_usage: {
+    args: Record<string, never>;
+    row: {
+      posts_count: number;
+      videos_count: number;
+      swipes_count: number;
+      super_likes_count: number;
+    };
+  };
 };
 
 type ScaleRpcResult<T> = { data: T[] | null; error: { message: string } | null };
@@ -65,6 +74,17 @@ export function fetchMyConversationPage(
   args: ScaleRpcDefinitions["get_my_conversation_page"]["args"],
 ) {
   return callScaleRpc("get_my_conversation_page", args);
+}
+
+export async function fetchDailyUserQuotaUsage() {
+  try {
+    return await callScaleRpc("get_my_daily_quota_usage", {});
+  } catch (error) {
+    return {
+      data: null,
+      error: { message: error instanceof Error ? error.message : "Could not load daily usage" },
+    };
+  }
 }
 
 const PULSE_STREAK_KEY = "mku_pulse_streak";
