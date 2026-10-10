@@ -166,6 +166,33 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_user_quotas: {
+        Row: {
+          posts_count: number
+          super_likes_count: number
+          swipes_count: number
+          usage_date: string
+          user_id: string
+          videos_count: number
+        }
+        Insert: {
+          posts_count?: number
+          super_likes_count?: number
+          swipes_count?: number
+          usage_date: string
+          user_id: string
+          videos_count?: number
+        }
+        Update: {
+          posts_count?: number
+          super_likes_count?: number
+          swipes_count?: number
+          usage_date?: string
+          user_id?: string
+          videos_count?: number
+        }
+        Relationships: []
+      }
       device_tokens: {
         Row: {
           created_at: string
@@ -971,6 +998,57 @@ export type Database = {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["sub_tier"]
       }
+      get_connect_candidates: {
+        Args: { _after_id: string; _limit: number }
+        Returns: {
+          avatar_url: string
+          bio: string
+          full_name: string
+          id: string
+          interests: string[]
+          is_banned: boolean
+          is_private: boolean
+          major: string
+          tier: Database["public"]["Enums"]["sub_tier"]
+          year_of_study: number
+        }[]
+      }
+      get_my_conversation_page: {
+        Args: {
+          _before_id: string
+          _before_last_message_at: string
+          _conversation_id: string
+          _limit: number
+        }
+        Returns: {
+          id: string
+          is_mentor: boolean
+          last_message: string
+          last_message_at: string
+          unread_count: number
+          user_a: string
+          user_b: string
+        }[]
+      }
+      get_my_daily_quota_usage: {
+        Args: never
+        Returns: {
+          posts_count: number
+          super_likes_count: number
+          swipes_count: number
+          videos_count: number
+        }[]
+      }
+      get_post_card_metrics: {
+        Args: { _post_ids: string[] }
+        Returns: {
+          comment_count: number
+          like_count: number
+          post_id: string
+          viewer_liked: boolean
+          viewer_reported: boolean
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -981,6 +1059,10 @@ export type Database = {
       in_conversation: {
         Args: { _conv: string; _user: string }
         Returns: boolean
+      }
+      initialize_daily_user_quota_row: {
+        Args: { _usage_date: string; _user_id: string }
+        Returns: undefined
       }
       is_blocked_between: { Args: { _a: string; _b: string }; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
@@ -1004,6 +1086,10 @@ export type Database = {
           option_id: string
           votes: number
         }[]
+      }
+      purge_expired_free_messages: {
+        Args: { _batch_size?: number }
+        Returns: number
       }
       send_compliment: {
         Args: { _recipient: string; _tag: string }
