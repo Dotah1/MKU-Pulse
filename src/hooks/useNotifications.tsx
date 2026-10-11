@@ -25,7 +25,7 @@ interface NotificationSnapshot {
 
 const NOTIFICATION_PAGE_SIZE = 50;
 const MAX_SHARED_ITEMS = 100;
-const REFRESH_INTERVAL_MS = 5 * 60_000;
+const REFRESH_INTERVAL_MS = 30_000;
 
 const EMPTY_SNAPSHOT: NotificationSnapshot = {
   items: [],
@@ -48,7 +48,8 @@ class NotificationStore {
     error: null,
   };
   private listeners = new Set<() => void>();
-  private channel: ReturnType<typeof supabase.channel> | null = null;
+  private seenIds = new Set<string>();
+  private primed = false;
   private timer: number | null = null;
   private requestId = 0;
   private loadMoreRequestId = 0;
@@ -76,54 +77,6 @@ class NotificationStore {
   start() {
     if (this.started) return;
     this.started = true;
-    this.channel = supabase
-      .channel(`notifications-${this.userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${this.userId}`,
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const incoming = payload.new as Partial<AppNotification> & { user_id?: string };
-            const occurredAt = Date.parse(incoming.created_at ?? "");
-            if (
-              incoming.user_id === this.userId &&
-              this.notificationsEnabled &&
-              incoming.id &&
-              Number.isFinite(occurredAt) &&
-              Date.now() - occurredAt >= 0 &&
-              Date.now() - occurredAt < 120_000 &&
-              (incoming.kind !== "announcement" || !isAnnouncementExpired(incoming.url ?? null))
-            ) {
-              playNotificationFeedback(notificationFeedbackKey(incoming.url, incoming.id));
-            }
-            this.upsertNotification(incoming);
-            return;
-          }
-
-          if (payload.eventType === "UPDATE") {
-            const incoming = payload.new as Partial<AppNotification>;
-            if (!incoming.id) return;
-            this.update({
-              items: this.snapshot.items.map((item) =>
-                item.id === incoming.id ? { ...item, ...incoming } : item,
-              ),
-            });
-            this.removeExpiredAnnouncements();
-            return;
-          }
-
-          if (payload.eventType === "DELETE") {
-            const id = (payload.old as Partial<AppNotification>).id;
-            if (id) this.update({ items: this.snapshot.items.filter((item) => item.id !== id) });
-          }
-        },
-      )
-      .subscribe();
 
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
     window.addEventListener("focus", this.handleFocus);
@@ -160,6 +113,21 @@ class NotificationStore {
             right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id),
         )
         .slice(0, MAX_SHARED_ITEMS);
+      for (const item of pageItems) {
+        if (this.seenIds.has(item.id)) continue;
+        this.seenIds.add(item.id);
+        const age = Date.now() - Date.parse(item.created_at);
+        if (
+          this.primed &&
+          this.notificationsEnabled &&
+          !item.read_at &&
+          age >= 0 &&
+          age < 120_000
+        ) {
+          playNotificationFeedback(notificationFeedbackKey(item.url, item.id));
+        }
+      }
+      this.primed = true;
       this.update({
         items,
         hasMore: (data?.length ?? 0) === NOTIFICATION_PAGE_SIZE && items.length < MAX_SHARED_ITEMS,
@@ -268,29 +236,6 @@ class NotificationStore {
     for (const listener of this.listeners) listener();
   }
 
-  private upsertNotification(incoming: Partial<AppNotification> & { user_id?: string }) {
-    if (
-      incoming.user_id !== this.userId ||
-      !incoming.id ||
-      typeof incoming.kind !== "string" ||
-      typeof incoming.title !== "string" ||
-      typeof incoming.body !== "string" ||
-      typeof incoming.created_at !== "string"
-    ) {
-      return;
-    }
-    if (incoming.kind === "announcement" && isAnnouncementExpired(incoming.url ?? null)) return;
-    const merged = new Map(this.snapshot.items.map((item) => [item.id, item]));
-    merged.set(incoming.id, incoming as AppNotification);
-    const items = [...merged.values()]
-      .sort(
-        (left, right) =>
-          right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id),
-      )
-      .slice(0, MAX_SHARED_ITEMS);
-    this.update({ items });
-  }
-
   private scheduleTimer() {
     if (this.timer !== null) window.clearInterval(this.timer);
     this.timer =
@@ -330,8 +275,6 @@ class NotificationStore {
     this.timer = null;
     document.removeEventListener("visibilitychange", this.handleVisibilityChange);
     window.removeEventListener("focus", this.handleFocus);
-    if (this.channel) void supabase.removeChannel(this.channel);
-    this.channel = null;
   }
 }
 

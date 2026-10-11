@@ -471,25 +471,12 @@ function IncomingRequests() {
     void load();
   }, [load]);
 
+  // Refresh when the mentor returns to the app (no always-on connection).
   useEffect(() => {
-    if (!user) return;
-    const channel = supabase
-      .channel(`mentor-requests-${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "mentor_sessions",
-          filter: `mentor_id=eq.${user.id}`,
-        },
-        () => void load(),
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [user, load]);
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [load]);
 
   const openChat = async (row: SessionRequestRow) => {
     if (!user) return;

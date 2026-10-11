@@ -97,16 +97,15 @@ export function CampusProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void loadSettings();
-    const channel = supabase
-      .channel("settings-watch")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "app_settings" },
-        () => void loadSettings(),
-      )
-      .subscribe();
+    const onFocus = () => void loadSettings();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadSettings();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
-      void supabase.removeChannel(channel);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [loadSettings]);
 
