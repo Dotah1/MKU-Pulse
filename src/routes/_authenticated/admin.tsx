@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TIER_LIMITS, sanitizeText, timeAgo, type Tier } from "@/lib/campus";
 import { fetchProfiles, type MiniProfile } from "@/lib/campus-data";
-import { uploadFile } from "@/lib/storage";
+import { compressAnnouncementImageFile, uploadFile } from "@/lib/storage";
 import { AdminMkuVerify } from "@/components/AdminMkuVerify";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -381,7 +381,12 @@ function AdminPage() {
     setNextOpenBusy(true);
     let imagePath: string | null = null;
     try {
-      if (nextOpenImage) imagePath = await uploadFile("media", user.id, nextOpenImage);
+      if (nextOpenImage) {
+        const compressedImage = await compressAnnouncementImageFile(nextOpenImage);
+        imagePath = await uploadFile("media", user.id, compressedImage, {
+          alreadyCompressed: true,
+        });
+      }
       const result = await broadcastAnnouncement({
         data: { title, body, imagePath, durationHours },
       });
