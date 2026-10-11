@@ -27,7 +27,7 @@ import {
   type Gender,
 } from "@/lib/campus";
 import { savePendingAvatar, uploadPendingAvatar } from "@/lib/pending-avatar";
-import { compressImageFile } from "@/lib/storage";
+import { compressAvatarFile } from "@/lib/storage";
 import { requestMkuCode } from "@/lib/mku-verify.functions";
 
 export const Route = createFileRoute("/auth")({
@@ -275,9 +275,9 @@ function SignupForm() {
     }
     setPhotoPreparing(true);
     try {
-      const compressed = await compressImageFile(file);
+      const compressed = await compressAvatarFile(file);
       if (compressed.size > AVATAR_MAX_BYTES)
-        throw new Error("Compressed profile picture must be 5MB or smaller");
+        throw new Error("Compressed profile picture must be 512KB or smaller");
       setPhoto(compressed);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not prepare that photo");

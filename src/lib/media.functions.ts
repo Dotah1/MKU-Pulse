@@ -33,7 +33,7 @@ export const deleteUnattachedMedia = createServerFn({ method: "POST" })
   .validator((data) => z.object({ path: z.string().min(1).max(512) }).parse(data))
   .handler(async ({ data, context }) => {
     const ownedPrefix = `${context.userId}/`;
-    const ownedR2Prefix = `r2:${ownedPrefix}`;
+    const ownedR2Prefix = `r2:media/${context.userId}/`;
     if (
       (!data.path.startsWith(ownedPrefix) && !data.path.startsWith(ownedR2Prefix)) ||
       data.path.includes("..") ||

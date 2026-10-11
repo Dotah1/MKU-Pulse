@@ -8,6 +8,8 @@ interface Env {
 
 const ALLOWED_BUCKETS = new Set(["avatars", "media"]);
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_AVATAR_BYTES = 512 * 1024;
+const ALLOWED_AVATAR_TYPES = new Set(["image/jpeg", "image/webp"]);
 const MAX_CLEANUP_PATHS = 200;
 const TOKEN_TTL_SECONDS = 60 * 60;
 
@@ -190,6 +192,12 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const uploadFile = file as File;
     if (!uploadFile.size || uploadFile.size > MAX_UPLOAD_BYTES)
       return json({ error: "File is too large" }, 413, origin);
+    if (
+      bucket === "avatars" &&
+      (uploadFile.size > MAX_AVATAR_BYTES || !ALLOWED_AVATAR_TYPES.has(uploadFile.type))
+    ) {
+      return json({ error: "Avatars must be JPEG or WebP and no larger than 512 KB" }, 413, origin);
+    }
     const key = `${bucket}/${userId}/${crypto.randomUUID()}.${extensionFor(uploadFile)}`;
     await env.MEDIA.put(key, await uploadFile.arrayBuffer(), {
       httpMetadata: {

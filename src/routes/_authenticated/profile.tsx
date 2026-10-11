@@ -31,7 +31,7 @@ import {
   type Gender,
   type Tier,
 } from "@/lib/campus";
-import { compressImageFile, uploadFile } from "@/lib/storage";
+import { compressAvatarFile, uploadFile } from "@/lib/storage";
 import { disablePush, requestPushConsent, revokePushConsent } from "@/lib/push";
 import {
   disableOneSignalBroadcasts,
@@ -185,9 +185,9 @@ function ProfilePage() {
 
     setAvatarBusy(true);
     try {
-      const compressed = await compressImageFile(file);
+      const compressed = await compressAvatarFile(file);
       if (compressed.size > AVATAR_MAX_BYTES) {
-        throw new Error("Compressed profile picture must be 5MB or smaller");
+        throw new Error("Compressed profile picture must be 512KB or smaller");
       }
       const path = await uploadFile("avatars", user.id, compressed, { alreadyCompressed: true });
       const { error } = await supabase

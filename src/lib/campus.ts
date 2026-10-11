@@ -21,8 +21,8 @@ export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: "female", label: "Female" },
 ];
 
-/** Profile pictures must stay under 5MB. */
-export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+/** Profile pictures are resized to 512px and must stay under 512KB. */
+export const AVATAR_MAX_BYTES = 512 * 1024;
 /** Feed uploads must stay under 25MB. */
 export const POST_MEDIA_MAX_BYTES = 25 * 1024 * 1024;
 /** Feed videos play for at most 60 seconds. */
