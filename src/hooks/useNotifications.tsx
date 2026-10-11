@@ -117,7 +117,13 @@ class NotificationStore {
         if (this.seenIds.has(item.id)) continue;
         this.seenIds.add(item.id);
         const age = Date.now() - Date.parse(item.created_at);
-        if (this.primed && this.notificationsEnabled && !item.read_at && age >= 0 && age < 120_000) {
+        if (
+          this.primed &&
+          this.notificationsEnabled &&
+          !item.read_at &&
+          age >= 0 &&
+          age < 120_000
+        ) {
           playNotificationFeedback(notificationFeedbackKey(item.url, item.id));
         }
       }
@@ -228,29 +234,6 @@ class NotificationStore {
   private update(patch: Partial<NotificationSnapshot>) {
     this.snapshot = { ...this.snapshot, ...patch };
     for (const listener of this.listeners) listener();
-  }
-
-  private upsertNotification(incoming: Partial<AppNotification> & { user_id?: string }) {
-    if (
-      incoming.user_id !== this.userId ||
-      !incoming.id ||
-      typeof incoming.kind !== "string" ||
-      typeof incoming.title !== "string" ||
-      typeof incoming.body !== "string" ||
-      typeof incoming.created_at !== "string"
-    ) {
-      return;
-    }
-    if (incoming.kind === "announcement" && isAnnouncementExpired(incoming.url ?? null)) return;
-    const merged = new Map(this.snapshot.items.map((item) => [item.id, item]));
-    merged.set(incoming.id, incoming as AppNotification);
-    const items = [...merged.values()]
-      .sort(
-        (left, right) =>
-          right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id),
-      )
-      .slice(0, MAX_SHARED_ITEMS);
-    this.update({ items });
   }
 
   private scheduleTimer() {
