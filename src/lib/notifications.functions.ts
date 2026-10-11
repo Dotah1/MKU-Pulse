@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ADMIN_EMAIL } from "@/lib/campus";
-import { createAnnouncementUrl } from "@/lib/announcement";
+import { createAnnouncementUrl, isOwnedAnnouncementImagePath } from "@/lib/announcement";
 
 export interface FirebaseWebConfig {
   apiKey: string;
@@ -559,7 +559,7 @@ export const broadcastAnnouncement = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const email = String(context.claims["email"] ?? "").toLowerCase();
     if (email !== ADMIN_EMAIL.toLowerCase()) throw new Error("Forbidden: admin access required");
-    if (data.imagePath && !data.imagePath.startsWith(`${context.userId}/`)) {
+    if (data.imagePath && !isOwnedAnnouncementImagePath(data.imagePath, context.userId)) {
       throw new Error("Announcement image must be uploaded to your own media folder");
     }
 

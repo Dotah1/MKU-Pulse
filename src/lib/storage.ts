@@ -8,6 +8,7 @@ const SIGNED_URL_STORAGE_PREFIX = "mku-pulse:signed-media:v1:";
 const MAX_PERSISTED_SIGNED_URLS = 100;
 const MAX_IMAGE_EDGE = 1200;
 const MAX_AVATAR_EDGE = 512;
+const MAX_ANNOUNCEMENT_IMAGE_BYTES = 1024 * 1024;
 const IMAGE_QUALITY = 0.8;
 const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
 const ALLOW_SUPABASE_MEDIA_FALLBACK =
@@ -182,6 +183,16 @@ export async function compressImageFile(file: File): Promise<File> {
 /** Resize profile photos to at most 512x512 and keep the result below 512 KB. */
 export async function compressAvatarFile(file: File): Promise<File> {
   return compressImageFileWithOptions(file, MAX_AVATAR_EDGE, 0.82, AVATAR_MAX_BYTES);
+}
+
+/** Compress announcement images for broad in-app delivery. */
+export async function compressAnnouncementImageFile(file: File): Promise<File> {
+  return compressImageFileWithOptions(
+    file,
+    MAX_IMAGE_EDGE,
+    IMAGE_QUALITY,
+    MAX_ANNOUNCEMENT_IMAGE_BYTES,
+  );
 }
 
 async function compressImageFileWithOptions(

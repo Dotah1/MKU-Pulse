@@ -1,10 +1,20 @@
 const ANNOUNCEMENT_EXPIRY_PARAM = "pulse_expires";
 const ANNOUNCEMENT_IMAGE_PARAM = "pulse_image";
 const URL_BASE = "https://mku-pulse.invalid";
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const IMAGE_NAME = "[a-z0-9][a-z0-9._-]*";
+const LEGACY_IMAGE_PATH = new RegExp(`^${UUID}/${IMAGE_NAME}$`, "i");
+const R2_IMAGE_PATH = new RegExp(`^r2:media/${UUID}/${IMAGE_NAME}$`, "i");
 
 export interface AnnouncementMetadata {
   expiresAt: number | null;
   imagePath: string | null;
+}
+
+export function isOwnedAnnouncementImagePath(path: string, userId: string): boolean {
+  if (path.length > 512 || path.includes("..") || path.includes("\\")) return false;
+  if (LEGACY_IMAGE_PATH.test(path)) return path.startsWith(`${userId}/`);
+  return R2_IMAGE_PATH.test(path) && path.startsWith(`r2:media/${userId}/`);
 }
 
 export function createAnnouncementUrl(imagePath: string | null, expiresAt: number): string {
@@ -25,9 +35,8 @@ export function getAnnouncementMetadata(url: string | null): AnnouncementMetadat
     const imagePath =
       rawImage &&
       rawImage.length <= 512 &&
-      !rawImage.startsWith("/") &&
       !rawImage.includes("..") &&
-      !rawImage.includes(":")
+      (LEGACY_IMAGE_PATH.test(rawImage) || R2_IMAGE_PATH.test(rawImage))
         ? rawImage
         : null;
 
