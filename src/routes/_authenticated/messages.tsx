@@ -771,7 +771,9 @@ function ChatPane({
         }
         void supabase
           .from("messages")
-          .select("id, conversation_id, sender_id, content, reply_to_id, post_id, read_at, created_at")
+          .select(
+            "id, conversation_id, sender_id, content, reply_to_id, post_id, read_at, created_at",
+          )
           .eq("conversation_id", conversation.id)
           .gt("created_at", latest.created_at)
           .order("created_at", { ascending: true })
