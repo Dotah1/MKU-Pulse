@@ -81,13 +81,12 @@ export async function clearPendingAvatar(): Promise<void> {
  */
 export async function uploadPendingAvatar(userId: string): Promise<boolean> {
   const { supabase } = await import("@/integrations/supabase/client");
-  const { uploadFile } = await import("@/lib/storage");
+  const { compressAvatarFile, uploadFile } = await import("@/lib/storage");
   const pending = await takePendingAvatar();
   if (!pending) return false;
   try {
-    const path = await uploadFile("avatars", userId, pending.file, {
-      alreadyCompressed: pending.alreadyCompressed,
-    });
+    const avatar = await compressAvatarFile(pending.file);
+    const path = await uploadFile("avatars", userId, avatar, { alreadyCompressed: true });
     const { error } = await supabase.from("profiles").update({ avatar_url: path }).eq("id", userId);
     if (error) throw error;
     await clearPendingAvatar();

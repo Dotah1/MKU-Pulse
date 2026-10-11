@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { notify } from "@/lib/notify";
 import { broadcastAnnouncement } from "@/lib/notifications.functions";
 import { deleteUserAccount } from "@/lib/admin.functions";
-import { deletePostWithMedia } from "@/lib/media.functions";
+import { deletePostWithMedia, deleteUnattachedMedia } from "@/lib/media.functions";
 import { useCampus } from "@/hooks/useCampus";
 import { UserAvatar } from "@/components/StoredMedia";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,15 @@ interface ReportRow {
   reason: string;
   status: string;
   created_at: string;
+}
+
+async function cleanupUnattachedUpload(path: string | null) {
+  if (!path) return;
+  try {
+    await deleteUnattachedMedia({ data: { path } });
+  } catch (error) {
+    console.warn("Could not remove an unattached announcement or poll image", error);
+  }
 }
 
 function AdminPage() {
@@ -377,7 +386,7 @@ function AdminPage() {
         data: { title, body, imagePath, durationHours },
       });
       if (result.recipients === 0) {
-        if (imagePath) await supabase.storage.from("media").remove([imagePath]);
+        await cleanupUnattachedUpload(imagePath);
         toast.error("No student profiles were found to notify");
         return;
       }
@@ -388,7 +397,7 @@ function AdminPage() {
       if (nextOpenImageInput.current) nextOpenImageInput.current.value = "";
       toast.success(`In-app announcement queued for ${result.recipients} students`);
     } catch {
-      if (imagePath) await supabase.storage.from("media").remove([imagePath]);
+      await cleanupUnattachedUpload(imagePath);
       toast.error("Could not send the in-app announcement");
     } finally {
       setNextOpenBusy(false);
@@ -417,7 +426,7 @@ function AdminPage() {
         .select("id")
         .single();
       if (error || !data) {
-        if (imagePath) await supabase.storage.from("media").remove([imagePath]);
+        await cleanupUnattachedUpload(imagePath);
         toast.error(error?.message ?? "Could not create the poll");
         return;
       }

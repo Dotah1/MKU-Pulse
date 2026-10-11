@@ -1,3 +1,4 @@
+import { AVATAR_MAX_BYTES } from "@/lib/campus";
 import { supabase } from "@/integrations/supabase/client";
 
 type CacheEntry = { url: string; expires: number };
@@ -6,8 +7,11 @@ const pending = new Map<string, Promise<string | null>>();
 const SIGNED_URL_STORAGE_PREFIX = "mku-pulse:signed-media:v1:";
 const MAX_PERSISTED_SIGNED_URLS = 100;
 const MAX_IMAGE_EDGE = 1200;
+const MAX_AVATAR_EDGE = 512;
 const IMAGE_QUALITY = 0.8;
 const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
+const ALLOW_SUPABASE_MEDIA_FALLBACK =
+  import.meta.env.DEV || import.meta.env["VITE_ALLOW_SUPABASE_MEDIA_FALLBACK"] === "true";
 const R2_MEDIA_WORKER_URL = (
   (import.meta.env["VITE_R2_MEDIA_WORKER_URL"] as string | undefined) ?? ""
 ).replace(/\/$/, "");
@@ -170,11 +174,22 @@ function canvasBlob(
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
 }
 
-/**
- * Resize a browser image to at most 1200x1200 and encode it as WebP (or JPEG
- * when WebP encoding is unavailable) at quality 0.8.
- */
+/** Resize general media to at most 1200x1200 and encode it as WebP/JPEG. */
 export async function compressImageFile(file: File): Promise<File> {
+  return compressImageFileWithOptions(file, MAX_IMAGE_EDGE, IMAGE_QUALITY);
+}
+
+/** Resize profile photos to at most 512x512 and keep the result below 512 KB. */
+export async function compressAvatarFile(file: File): Promise<File> {
+  return compressImageFileWithOptions(file, MAX_AVATAR_EDGE, 0.82, AVATAR_MAX_BYTES);
+}
+
+async function compressImageFileWithOptions(
+  file: File,
+  maxEdge: number,
+  quality: number,
+  maxBytes?: number,
+): Promise<File> {
   if (!file.type.startsWith("image/")) throw new Error("Choose an image file");
   if (file.size > MAX_SOURCE_IMAGE_BYTES) {
     throw new Error("Images must be 50MB or smaller before compression");
@@ -211,7 +226,16 @@ export async function compressImageFile(file: File): Promise<File> {
 
   try {
     if (!width || !height) throw new Error("Could not read image dimensions");
-    const scale = Math.min(1, MAX_IMAGE_EDGE / width, MAX_IMAGE_EDGE / height);
+    if (
+      maxBytes !== undefined &&
+      width <= maxEdge &&
+      height <= maxEdge &&
+      file.size <= maxBytes &&
+      (file.type === "image/webp" || file.type === "image/jpeg")
+    ) {
+      return file;
+    }
+    const scale = Math.min(1, maxEdge / width, maxEdge / height);
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(width * scale));
     canvas.height = Math.max(1, Math.round(height * scale));
@@ -219,18 +243,36 @@ export async function compressImageFile(file: File): Promise<File> {
     if (!context) throw new Error("This browser cannot process images");
     context.drawImage(source, 0, 0, canvas.width, canvas.height);
 
-    const webp = await canvasBlob(canvas, "image/webp", IMAGE_QUALITY);
-    let blob = webp?.type === "image/webp" ? webp : null;
-    if (!blob) {
+    const qualities = maxBytes === undefined ? [quality] : [0.82, 0.74, 0.66, 0.58, 0.5];
+    const firstWebp = await canvasBlob(canvas, "image/webp", qualities[0] ?? quality);
+    const outputType = firstWebp?.type === "image/webp" ? "image/webp" : "image/jpeg";
+    if (outputType === "image/jpeg") {
       // JPEG has no alpha channel; place transparent pixels on white rather
       // than letting browsers turn them black during encoding.
       context.globalCompositeOperation = "destination-over";
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, canvas.width, canvas.height);
       context.globalCompositeOperation = "source-over";
-      const jpeg = await canvasBlob(canvas, "image/jpeg", IMAGE_QUALITY);
-      if (jpeg?.type !== "image/jpeg") throw new Error("Could not compress this image");
-      blob = jpeg;
+    }
+
+    let blob: Blob | null = null;
+    for (const [index, candidateQuality] of qualities.entries()) {
+      const candidate =
+        index === 0 && outputType === "image/webp"
+          ? firstWebp
+          : await canvasBlob(canvas, outputType, candidateQuality);
+      if (!candidate || candidate.type !== outputType) continue;
+      if (maxBytes === undefined || candidate.size <= maxBytes) {
+        blob = candidate;
+        break;
+      }
+    }
+    if (!blob) {
+      throw new Error(
+        maxBytes === undefined
+          ? "Could not compress this image"
+          : "Profile picture must compress to 512 KB or less. Choose a different image.",
+      );
     }
 
     const baseName = file.name.replace(/\.[^.]+$/, "") || "image";
@@ -273,9 +315,17 @@ export async function uploadFile(
   options: { alreadyCompressed?: boolean } = {},
 ): Promise<string> {
   const upload =
-    file.type.startsWith("image/") && !options.alreadyCompressed
-      ? await compressImageFile(file)
-      : file;
+    bucket === "avatars"
+      ? await compressAvatarFile(file)
+      : file.type.startsWith("image/") && !options.alreadyCompressed
+        ? await compressImageFile(file)
+        : file;
+  if (
+    bucket === "avatars" &&
+    (upload.size > AVATAR_MAX_BYTES || !["image/webp", "image/jpeg"].includes(upload.type))
+  ) {
+    throw new Error("Profile pictures must be JPEG or WebP and 512 KB or smaller");
+  }
   const contentTypeExtension: Record<string, string> = {
     "image/jpeg": "jpg",
     "image/webp": "webp",
@@ -285,25 +335,30 @@ export async function uploadFile(
   };
   const ext =
     contentTypeExtension[upload.type] ?? upload.name.split(".").pop()?.toLowerCase() ?? "bin";
+  if (!R2_MEDIA_WORKER_URL && !ALLOW_SUPABASE_MEDIA_FALLBACK) {
+    throw new Error("Media uploads are unavailable because the R2 Worker is not configured");
+  }
   if (R2_MEDIA_WORKER_URL) {
     try {
       const authorization = await getAuthorizationHeader();
-      if (authorization) {
-        const form = new FormData();
-        form.set("bucket", bucket);
-        form.set("file", new File([upload], `upload.${ext}`, { type: upload.type }));
-        const response = await fetch(`${R2_MEDIA_WORKER_URL}/upload`, {
-          method: "POST",
-          headers: { Authorization: authorization },
-          body: form,
-        });
-        if (response.ok) {
-          const payload = (await response.json()) as { path?: string };
-          if (payload.path?.startsWith("r2:")) return payload.path;
-        }
+      if (!authorization) throw new Error("Sign in again before uploading media");
+      const form = new FormData();
+      form.set("bucket", bucket);
+      form.set("file", new File([upload], `upload.${ext}`, { type: upload.type }));
+      const response = await fetch(`${R2_MEDIA_WORKER_URL}/upload`, {
+        method: "POST",
+        headers: { Authorization: authorization },
+        body: form,
+      });
+      if (!response.ok) throw new Error("R2 upload failed. Please retry.");
+      const payload = (await response.json()) as { path?: string };
+      if (payload.path?.startsWith("r2:")) return payload.path;
+      throw new Error("R2 returned an invalid media path");
+    } catch (error) {
+      if (!ALLOW_SUPABASE_MEDIA_FALLBACK) {
+        throw error instanceof Error ? error : new Error("R2 upload failed. Please retry.");
       }
-    } catch {
-      // R2 is an optional acceleration path during rollout; retain Supabase fallback.
+      // Development may use Supabase Storage when the local R2 Worker is unavailable.
     }
   }
 
