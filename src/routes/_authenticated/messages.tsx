@@ -463,6 +463,10 @@ function ChatPane({
 }) {
   const { user, limits } = useCampus();
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const latestMessageRef = useRef<MessageRow | null>(null);
+  useEffect(() => {
+    latestMessageRef.current = messages.at(-1) ?? null;
+  }, [messages]);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [draft, setDraft] = useState("");
@@ -754,8 +758,34 @@ function ChatPane({
     // quietly refresh the chat every 2.5s until it reconnects.
     const startPolling = () => {
       if (pollTimer !== null || disposed || isPageHidden()) return;
+      let ticks = 0;
       pollTimer = window.setInterval(() => {
-        if (!disposed && !isPageHidden()) void load();
+        if (disposed || isPageHidden()) return;
+        ticks += 1;
+        // Every ~25s do a full refresh (read receipts, edits); otherwise only
+        // fetch messages newer than the last one we have to save data.
+        const latest = latestMessageRef.current;
+        if (!latest || ticks % 10 === 0) {
+          void load();
+          return;
+        }
+        void supabase
+          .from("messages")
+          .select("id, conversation_id, sender_id, content, reply_to_id, post_id, read_at, created_at")
+          .eq("conversation_id", conversation.id)
+          .gt("created_at", latest.created_at)
+          .order("created_at", { ascending: true })
+          .limit(50)
+          .then(({ data }) => {
+            if (disposed || !data?.length) return;
+            let incoming = false;
+            for (const row of data as MessageRow[]) {
+              appendMessage(row);
+              if (row.sender_id !== user?.id) incoming = true;
+              if (row.post_id) void loadPostRef(row.post_id);
+            }
+            if (incoming) void markConversationRead();
+          });
       }, 2500);
     };
     const stopPolling = () => {

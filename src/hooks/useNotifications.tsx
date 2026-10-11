@@ -246,7 +246,20 @@ class NotificationStore {
 
   private refresh = async () => {
     this.removeExpiredAnnouncements();
-    if (document.visibilityState === "visible") await this.load();
+    if (document.visibilityState !== "visible") return;
+    // Cheap check first: only download the full list when something new arrived.
+    const top = this.snapshot.items[0];
+    if (top && !this.snapshot.error) {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("id")
+        .eq("user_id", this.userId)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(1);
+      if (!error && data?.[0]?.id === top.id) return;
+    }
+    await this.load();
   };
 
   private handleVisibilityChange = () => {
