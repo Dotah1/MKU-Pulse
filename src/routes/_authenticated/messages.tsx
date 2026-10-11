@@ -748,7 +748,20 @@ function ChatPane({
     let activeChannel: ReturnType<typeof supabase.channel> | null = null;
     let removePending: Promise<unknown> | null = null;
     let disposed = false;
+    let pollTimer: number | null = null;
     const isPageHidden = () => document.visibilityState === "hidden";
+    // Fallback: if the live connection is unavailable (e.g. busy periods),
+    // quietly refresh the chat every 2.5s until it reconnects.
+    const startPolling = () => {
+      if (pollTimer !== null || disposed || isPageHidden()) return;
+      pollTimer = window.setInterval(() => {
+        if (!disposed && !isPageHidden()) void load();
+      }, 2500);
+    };
+    const stopPolling = () => {
+      if (pollTimer !== null) window.clearInterval(pollTimer);
+      pollTimer = null;
+    };
 
     const removeActiveChannel = () => {
       const channel = activeChannel;
@@ -822,12 +835,18 @@ function ChatPane({
         )
         .subscribe((status) => {
           if (disposed || activeChannel !== channel) return;
-          if (status === "SUBSCRIBED") void load();
+          if (status === "SUBSCRIBED") {
+            stopPolling();
+            void load();
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            startPolling();
+          }
         });
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
+        stopPolling();
         removeActiveChannel();
       } else if (!activeChannel) {
         void subscribeToActiveChat();
@@ -838,6 +857,7 @@ function ChatPane({
     void subscribeToActiveChat();
     return () => {
       disposed = true;
+      stopPolling();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       removeActiveChannel();
     };
