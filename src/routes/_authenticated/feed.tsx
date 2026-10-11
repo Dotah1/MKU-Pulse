@@ -38,6 +38,36 @@ type FeedFilter = (typeof FEED_FILTERS)[number]["id"];
 const POSTS_PAGE_SIZE = 20;
 const MAX_REFRESH_POSTS = 100;
 const RECENT_POSTS_KEY = "mku_recent_posts";
+const FEED_CACHE_TTL_MS = 2 * 60 * 1000;
+
+interface FeedMemoryCache {
+  userId: string;
+  cachedAt: number;
+  posts: PostRow[];
+  postMetrics: Record<string, PostCardMetrics> | null;
+  polls: PollRow[];
+  pollOptions: Record<string, PollOptionRow[]>;
+  hasMorePosts: boolean;
+  postsOffset: number;
+  knownPostIds: string[];
+  pendingNewPostIds: string[];
+  activeFilter: FeedFilter;
+  lastNewPostCheckAt: number;
+}
+
+let feedMemoryCache: FeedMemoryCache | null = null;
+let feedLastNewPostCheckAt = 0;
+
+function getFreshFeedCache(userId: string): FeedMemoryCache | null {
+  if (
+    !feedMemoryCache ||
+    feedMemoryCache.userId !== userId ||
+    Date.now() - feedMemoryCache.cachedAt >= FEED_CACHE_TTL_MS
+  ) {
+    return null;
+  }
+  return feedMemoryCache;
+}
 
 interface RecentPostDraft {
   id: string;
@@ -145,75 +175,98 @@ function FeedPage() {
   const [usedVideosToday, setUsedVideosToday] = useState(0);
   const [pulseStreak, setPulseStreak] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<FeedFilter>("all");
+  const [feedCacheHydrated, setFeedCacheHydrated] = useState(false);
   const postsOffset = useRef(0);
   const feedGeneration = useRef(0);
   const knownPostIds = useRef(new Set<string>());
   const pendingNewPostIds = useRef(new Set<string>());
   const hasLoadedFeed = useRef(false);
   const checkingForNewPosts = useRef(false);
-  const lastNewPostCheck = useRef(0);
+  const lastNewPostCheck = useRef(feedLastNewPostCheckAt);
   const authors = usePostAuthors(posts);
   const filteredPosts = useMemo(
     () => posts.filter((post) => postMatchesFilter(post, activeFilter)),
     [posts, activeFilter],
   );
 
-  const load = useCallback(async (silent = false) => {
-    const generation = ++feedGeneration.current;
-    if (!silent) setLoading(true);
-    const pageSize = silent
-      ? Math.max(POSTS_PAGE_SIZE, Math.min(pendingNewPostIds.current.size, MAX_REFRESH_POSTS))
-      : POSTS_PAGE_SIZE;
-    let data: PostRow[] | null = null;
-    let error: { message: string } | null = null;
-    let pollData: { polls: PollRow[]; options: Record<string, PollOptionRow[]> } | null = null;
-    try {
-      const [postResult, loadedPolls] = await Promise.all([
-        supabase
-          .from("posts")
-          .select(
-            "id, user_id, content, image_url, video_url, video_seconds, is_announcement, created_at",
-          )
-          .order("is_announcement", { ascending: false })
-          .order("created_at", { ascending: false })
-          .range(0, pageSize - 1),
-        fetchFeedPolls(),
-      ]);
-      data = (postResult.data ?? []) as PostRow[];
-      error = postResult.error;
-      pollData = loadedPolls;
-    } catch (loadError) {
-      if (generation !== feedGeneration.current) return;
-      toast.error(loadError instanceof Error ? loadError.message : "Could not refresh the feed");
-      if (!silent) setLoading(false);
-      return;
-    }
-    if (generation !== feedGeneration.current) return;
-    if (error) {
-      toast.error(error.message);
-      if (!silent) {
-        setPosts([]);
-        setHasMorePosts(false);
+  const load = useCallback(
+    async (silent = false) => {
+      const generation = ++feedGeneration.current;
+      if (!silent) setLoading(true);
+      const pageSize = silent
+        ? Math.max(POSTS_PAGE_SIZE, Math.min(pendingNewPostIds.current.size, MAX_REFRESH_POSTS))
+        : POSTS_PAGE_SIZE;
+      let data: PostRow[] | null = null;
+      let error: { message: string } | null = null;
+      let pollData: { polls: PollRow[]; options: Record<string, PollOptionRow[]> } | null = null;
+      let loadedMetrics: Record<string, PostCardMetrics> | null = null;
+      try {
+        const [postResult, loadedPolls] = await Promise.all([
+          supabase
+            .from("posts")
+            .select(
+              "id, user_id, content, image_url, video_url, video_seconds, is_announcement, created_at",
+            )
+            .order("is_announcement", { ascending: false })
+            .order("created_at", { ascending: false })
+            .range(0, pageSize - 1),
+          fetchFeedPolls(),
+        ]);
+        data = (postResult.data ?? []) as PostRow[];
+        error = postResult.error;
+        pollData = loadedPolls;
+      } catch (loadError) {
+        if (generation !== feedGeneration.current) return;
+        toast.error(loadError instanceof Error ? loadError.message : "Could not refresh the feed");
+        if (!silent) setLoading(false);
+        return;
       }
-    } else {
-      const rows = data ?? [];
-      const metrics = await fetchPostCardMetrics(rows.map((post) => post.id));
       if (generation !== feedGeneration.current) return;
-      setPosts(rows);
-      setPostMetrics(metrics);
-      postsOffset.current = rows.length;
-      knownPostIds.current = new Set(rows.map((post) => post.id));
-      for (const post of rows) pendingNewPostIds.current.delete(post.id);
-      setNewPostCount(pendingNewPostIds.current.size);
-      setHasMorePosts(rows.length === pageSize);
-      hasLoadedFeed.current = true;
-    }
-    if (pollData) {
-      setPolls(pollData.polls);
-      setPollOptions(pollData.options);
-    }
-    if (!silent) setLoading(false);
-  }, []);
+      if (error) {
+        toast.error(error.message);
+        if (!silent) {
+          setPosts([]);
+          setHasMorePosts(false);
+        }
+      } else {
+        const rows = data ?? [];
+        const metrics = await fetchPostCardMetrics(rows.map((post) => post.id));
+        if (generation !== feedGeneration.current) return;
+        loadedMetrics = metrics;
+        setPosts(rows);
+        setPostMetrics(metrics);
+        postsOffset.current = rows.length;
+        knownPostIds.current = new Set(rows.map((post) => post.id));
+        for (const post of rows) pendingNewPostIds.current.delete(post.id);
+        setNewPostCount(pendingNewPostIds.current.size);
+        setHasMorePosts(rows.length === pageSize);
+        hasLoadedFeed.current = true;
+      }
+      if (pollData) {
+        setPolls(pollData.polls);
+        setPollOptions(pollData.options);
+      }
+      if (!error && user?.id) {
+        feedMemoryCache = {
+          userId: user.id,
+          cachedAt: Date.now(),
+          posts: data ?? [],
+          postMetrics: loadedMetrics,
+          polls: pollData?.polls ?? [],
+          pollOptions: pollData?.options ?? {},
+          hasMorePosts: (data?.length ?? 0) === pageSize,
+          postsOffset: data?.length ?? 0,
+          knownPostIds: (data ?? []).map((post) => post.id),
+          pendingNewPostIds: [...pendingNewPostIds.current],
+          activeFilter: feedMemoryCache?.userId === user.id ? feedMemoryCache.activeFilter : "all",
+          lastNewPostCheckAt: lastNewPostCheck.current,
+        };
+        setFeedCacheHydrated(true);
+      }
+      if (!silent) setLoading(false);
+    },
+    [user?.id],
+  );
 
   const loadMorePosts = async () => {
     if (loadingMorePosts || !hasMorePosts) return;
@@ -254,8 +307,32 @@ function FeedPage() {
   };
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    const cached = feedMemoryCache;
+    if (!feedCacheHydrated || !user?.id || cached?.userId !== user.id) return;
+    feedMemoryCache = {
+      ...cached,
+      posts,
+      postMetrics,
+      polls,
+      pollOptions,
+      hasMorePosts,
+      postsOffset: postsOffset.current,
+      knownPostIds: [...knownPostIds.current],
+      pendingNewPostIds: [...pendingNewPostIds.current],
+      activeFilter,
+      lastNewPostCheckAt: lastNewPostCheck.current,
+    };
+  }, [
+    activeFilter,
+    feedCacheHydrated,
+    hasMorePosts,
+    newPostCount,
+    pollOptions,
+    polls,
+    postMetrics,
+    posts,
+    user?.id,
+  ]);
 
   const checkForNewPosts = useCallback(async () => {
     if (
@@ -268,6 +345,10 @@ function FeedPage() {
     }
     checkingForNewPosts.current = true;
     lastNewPostCheck.current = Date.now();
+    feedLastNewPostCheckAt = lastNewPostCheck.current;
+    if (feedMemoryCache?.userId === user.id) {
+      feedMemoryCache = { ...feedMemoryCache, lastNewPostCheckAt: lastNewPostCheck.current };
+    }
     try {
       const { data, error } = await supabase
         .from("posts")
@@ -288,6 +369,30 @@ function FeedPage() {
     }
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    const cached = getFreshFeedCache(user.id);
+    if (cached) {
+      setPosts(cached.posts);
+      setPostMetrics(cached.postMetrics);
+      setPolls(cached.polls);
+      setPollOptions(cached.pollOptions);
+      setHasMorePosts(cached.hasMorePosts);
+      setActiveFilter(cached.activeFilter);
+      setNewPostCount(cached.pendingNewPostIds.length);
+      postsOffset.current = cached.postsOffset;
+      knownPostIds.current = new Set(cached.knownPostIds);
+      pendingNewPostIds.current = new Set(cached.pendingNewPostIds);
+      lastNewPostCheck.current = cached.lastNewPostCheckAt;
+      feedLastNewPostCheckAt = cached.lastNewPostCheckAt;
+      hasLoadedFeed.current = true;
+      setLoading(false);
+      setFeedCacheHydrated(true);
+      void checkForNewPosts();
+      return;
+    }
+    void load();
+  }, [checkForNewPosts, load, user?.id]);
   useEffect(() => {
     if (!user?.id) return;
     const refreshWhenVisible = () => {

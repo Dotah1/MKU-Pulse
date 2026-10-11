@@ -40,6 +40,65 @@ interface CampusState {
 }
 
 const Ctx = createContext<CampusState | null>(null);
+const SETTINGS_CACHE_TTL_MS = 2 * 60 * 1000;
+
+interface CampusSettingsSnapshot {
+  freeAccessMode: boolean;
+  paymentInfo: PaymentInfo;
+  cachedAt: number;
+}
+
+let campusSettingsCache: CampusSettingsSnapshot | null = null;
+let campusSettingsRequest: Promise<CampusSettingsSnapshot | null> | null = null;
+let campusSettingsRequestId = 0;
+
+async function fetchCampusSettings(force = false): Promise<CampusSettingsSnapshot | null> {
+  if (
+    !force &&
+    campusSettingsCache &&
+    Date.now() - campusSettingsCache.cachedAt < SETTINGS_CACHE_TTL_MS
+  ) {
+    return campusSettingsCache;
+  }
+  if (!force && campusSettingsRequest) return campusSettingsRequest;
+
+  const requestId = ++campusSettingsRequestId;
+  const request = (async () => {
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("key, value")
+      .in("key", ["free_access_mode", "payment_info"]);
+    if (error || !data || requestId !== campusSettingsRequestId) return null;
+
+    const next: CampusSettingsSnapshot = {
+      freeAccessMode: campusSettingsCache?.freeAccessMode ?? false,
+      paymentInfo: campusSettingsCache?.paymentInfo ?? DEFAULT_PAYMENT_INFO,
+      cachedAt: Date.now(),
+    };
+    for (const row of data) {
+      if (row.key === "free_access_mode") {
+        const value = (row.value ?? null) as { enabled?: boolean } | null;
+        next.freeAccessMode = Boolean(value?.enabled);
+      }
+      if (row.key === "payment_info") {
+        const value = (row.value ?? {}) as Partial<PaymentInfo>;
+        next.paymentInfo = {
+          number: value.number || DEFAULT_PAYMENT_INFO.number,
+          mid_price: Number(value.mid_price ?? DEFAULT_PAYMENT_INFO.mid_price),
+          full_price: Number(value.full_price ?? DEFAULT_PAYMENT_INFO.full_price),
+        };
+      }
+    }
+    campusSettingsCache = next;
+    return next;
+  })();
+  campusSettingsRequest = request;
+  try {
+    return await request;
+  } finally {
+    if (requestId === campusSettingsRequestId) campusSettingsRequest = null;
+  }
+}
 
 export function CampusProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
@@ -62,25 +121,11 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const loadSettings = useCallback(async () => {
-    const { data } = await supabase
-      .from("app_settings")
-      .select("key, value")
-      .in("key", ["free_access_mode", "payment_info"]);
-    for (const row of data ?? []) {
-      if (row.key === "free_access_mode") {
-        const v = (row.value ?? null) as { enabled?: boolean } | null;
-        setFreeAccessMode(Boolean(v?.enabled));
-      }
-      if (row.key === "payment_info") {
-        const v = (row.value ?? {}) as Partial<PaymentInfo>;
-        setPaymentInfo({
-          number: v.number || DEFAULT_PAYMENT_INFO.number,
-          mid_price: Number(v.mid_price ?? DEFAULT_PAYMENT_INFO.mid_price),
-          full_price: Number(v.full_price ?? DEFAULT_PAYMENT_INFO.full_price),
-        });
-      }
-    }
+  const loadSettings = useCallback(async (force = false) => {
+    const settings = await fetchCampusSettings(force);
+    if (!settings) return;
+    setFreeAccessMode(settings.freeAccessMode);
+    setPaymentInfo(settings.paymentInfo);
   }, []);
 
   useEffect(() => {
@@ -150,9 +195,19 @@ export function CampusProvider({ children }: { children: ReactNode }) {
         const id = userId ?? session?.user.id;
         if (id) await loadProfile(id);
       },
-      refreshSettings: loadSettings,
-      setFreeAccessModeLocal: setFreeAccessMode,
-      setPaymentInfoLocal: setPaymentInfo,
+      refreshSettings: () => loadSettings(true),
+      setFreeAccessModeLocal: (enabled) => {
+        setFreeAccessMode(enabled);
+        if (campusSettingsCache) {
+          campusSettingsCache = { ...campusSettingsCache, freeAccessMode: enabled };
+        }
+      },
+      setPaymentInfoLocal: (info) => {
+        setPaymentInfo(info);
+        if (campusSettingsCache) {
+          campusSettingsCache = { ...campusSettingsCache, paymentInfo: info };
+        }
+      },
       signOut: async () => {
         const userId = session?.user.id;
         if (userId && !(await disablePush(userId))) {

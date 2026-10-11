@@ -29,6 +29,18 @@ export interface PollOptionRow {
   position: number;
 }
 
+const POLL_RESULT_CACHE_TTL_MS = 60 * 1000;
+const pollResultCache = new Map<
+  string,
+  { counts: Record<string, number>; total: number; myOption: string | null; cachedAt: number }
+>();
+
+function getCachedPollResult(key: string) {
+  const cached = pollResultCache.get(key);
+  if (!cached || Date.now() - cached.cachedAt >= POLL_RESULT_CACHE_TTL_MS) return null;
+  return cached;
+}
+
 export function PollCard({
   poll,
   options,
@@ -39,9 +51,14 @@ export function PollCard({
   onDeleted?: (id: string) => void;
 }) {
   const { user, isAdmin, profile } = useCampus();
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [total, setTotal] = useState(0);
-  const [myOption, setMyOption] = useState<string | null>(null);
+  const pollCacheKey = `${user?.id ?? "anonymous"}:${poll.id}`;
+  const [counts, setCounts] = useState<Record<string, number>>(
+    () => getCachedPollResult(pollCacheKey)?.counts ?? {},
+  );
+  const [total, setTotal] = useState(() => getCachedPollResult(pollCacheKey)?.total ?? 0);
+  const [myOption, setMyOption] = useState<string | null>(
+    () => getCachedPollResult(pollCacheKey)?.myOption ?? null,
+  );
   const [busy, setBusy] = useState(false);
   const [pollRef, isNearViewport] = useNearViewport<HTMLElement>("240px 0px", false);
   const [hasBeenNearViewport, setHasBeenNearViewport] = useState(false);
@@ -50,34 +67,51 @@ export function PollCard({
   const closed =
     !poll.is_active || (poll.closes_at ? new Date(poll.closes_at).getTime() < Date.now() : false);
 
-  const load = useCallback(async () => {
-    const [{ data: tallies }, { data: mine }] = await Promise.all([
-      supabase.rpc("poll_vote_counts", { _poll: poll.id }),
-      user
-        ? supabase
-            .from("poll_votes")
-            .select("option_id")
-            .eq("poll_id", poll.id)
-            .eq("user_id", user.id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
-    const map: Record<string, number> = {};
-    let sum = 0;
-    for (const r of (tallies ?? []) as { option_id: string; votes: number }[]) {
-      map[r.option_id] = Number(r.votes);
-      sum += Number(r.votes);
-    }
-    setCounts(map);
-    setTotal(sum);
-    setMyOption((mine as { option_id: string } | null)?.option_id ?? null);
-  }, [poll.id, user]);
+  const load = useCallback(
+    async (force = false) => {
+      const cached = force ? null : getCachedPollResult(pollCacheKey);
+      if (cached) {
+        setCounts(cached.counts);
+        setTotal(cached.total);
+        setMyOption(cached.myOption);
+        return;
+      }
+      const [{ data: tallies }, { data: mine }] = await Promise.all([
+        supabase.rpc("poll_vote_counts", { _poll: poll.id }),
+        user
+          ? supabase
+              .from("poll_votes")
+              .select("option_id")
+              .eq("poll_id", poll.id)
+              .eq("user_id", user.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+      const map: Record<string, number> = {};
+      let sum = 0;
+      for (const r of (tallies ?? []) as { option_id: string; votes: number }[]) {
+        map[r.option_id] = Number(r.votes);
+        sum += Number(r.votes);
+      }
+      const myVote = (mine as { option_id: string } | null)?.option_id ?? null;
+      pollResultCache.set(pollCacheKey, {
+        counts: map,
+        total: sum,
+        myOption: myVote,
+        cachedAt: Date.now(),
+      });
+      setCounts(map);
+      setTotal(sum);
+      setMyOption(myVote);
+    },
+    [poll.id, pollCacheKey, user],
+  );
 
   const scheduleLoad = useCallback(() => {
     if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);
     refreshTimer.current = window.setTimeout(() => {
       refreshTimer.current = null;
-      void load();
+      void load(true);
     }, 300);
   }, [load]);
 
@@ -148,7 +182,7 @@ export function PollCard({
         eventId: voteEvent.id,
       });
     }
-    await load();
+    await load(true);
   };
 
   const removePoll = async () => {

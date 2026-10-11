@@ -93,6 +93,14 @@ interface Comment {
 }
 
 const COMMENT_PAGE_SIZE = 20;
+const POST_AUTHOR_CACHE_TTL_MS = 2 * 60 * 1000;
+const postAuthorCache = new Map<string, { profile: MiniProfile; cachedAt: number }>();
+
+function getCachedPostAuthor(userId: string): MiniProfile | null {
+  const cached = postAuthorCache.get(userId);
+  if (!cached || Date.now() - cached.cachedAt >= POST_AUTHOR_CACHE_TTL_MS) return null;
+  return cached.profile;
+}
 
 export function PostCard({
   post,
@@ -629,14 +637,34 @@ export function PostCard({
 
 export function usePostAuthors(posts: PostRow[]) {
   const ids = useMemo(() => [...new Set(posts.map((post) => post.user_id))], [posts]);
-  const [authors, setAuthors] = useState<Record<string, MiniProfile>>({});
+  const [authors, setAuthors] = useState<Record<string, MiniProfile>>(() =>
+    Object.fromEntries(
+      ids.flatMap((id) => {
+        const cached = getCachedPostAuthor(id);
+        return cached ? [[id, cached]] : [];
+      }),
+    ),
+  );
   const requested = useRef(new Set<string>());
   useEffect(() => {
-    const missing = ids.filter((id) => !requested.current.has(id));
+    const cachedAuthors = Object.fromEntries(
+      ids.flatMap((id) => {
+        const cached = getCachedPostAuthor(id);
+        return cached ? [[id, cached]] : [];
+      }),
+    );
+    if (Object.keys(cachedAuthors).length > 0) {
+      setAuthors((current) => ({ ...current, ...cachedAuthors }));
+    }
+    const missing = ids.filter((id) => !requested.current.has(id) && !getCachedPostAuthor(id));
     if (missing.length === 0) return;
     for (const id of missing) requested.current.add(id);
     void import("@/lib/campus-data").then(async ({ fetchProfiles }) => {
       const map = await fetchProfiles(missing);
+      const cachedAt = Date.now();
+      for (const profile of Object.values(map)) {
+        postAuthorCache.set(profile.id, { profile, cachedAt });
+      }
       setAuthors((current) => ({ ...current, ...map }));
     });
   }, [ids]);
