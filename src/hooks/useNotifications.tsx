@@ -25,7 +25,7 @@ interface NotificationSnapshot {
 
 const NOTIFICATION_PAGE_SIZE = 50;
 const MAX_SHARED_ITEMS = 100;
-const REFRESH_INTERVAL_MS = 30_000;
+const REFRESH_INTERVAL_MS = 60_000;
 
 const EMPTY_SNAPSHOT: NotificationSnapshot = {
   items: [],
