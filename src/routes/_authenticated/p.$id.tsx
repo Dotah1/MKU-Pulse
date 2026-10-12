@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PostCard, type PostRow } from "@/components/PostCard";
 import { Button } from "@/components/ui/button";
+import { useCampus } from "@/hooks/useCampus";
 import { fetchProfiles, type MiniProfile } from "@/lib/campus-data";
 
 export const Route = createFileRoute("/_authenticated/p/$id")({
@@ -20,6 +21,7 @@ export const Route = createFileRoute("/_authenticated/p/$id")({
 
 function SinglePostPage() {
   const { id } = Route.useParams();
+  const { user } = useCampus();
   const [post, setPost] = useState<PostRow | null>(null);
   const [author, setAuthor] = useState<MiniProfile | undefined>();
   const [loading, setLoading] = useState(true);
@@ -40,14 +42,14 @@ function SinglePostPage() {
       setPost(row);
       setLoading(false);
       if (row) {
-        const map = await fetchProfiles([row.user_id]);
+        const map = await fetchProfiles([row.user_id], user ? { viewerId: user.id } : {});
         if (active) setAuthor(map[row.user_id]);
       }
     })();
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, user]);
 
   return (
     <div className="space-y-4">

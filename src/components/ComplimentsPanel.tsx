@@ -5,6 +5,7 @@ import { Heart } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { COMPLIMENT_OPTIONS, fetchProfiles, type MiniProfile } from "@/lib/campus-data";
+import { useCampus } from "@/hooks/useCampus";
 import { notifyUser } from "@/lib/notifications.functions";
 import { timeAgo } from "@/lib/campus";
 
@@ -102,17 +103,33 @@ interface Received {
 
 /** Compliments the signed-in student has received. */
 export function ReceivedCompliments() {
+  const { user } = useCampus();
+  const viewerId = user?.id;
   const [items, setItems] = useState<Received[]>([]);
   const [people, setPeople] = useState<Record<string, MiniProfile>>({});
 
   useEffect(() => {
+    if (!viewerId) {
+      setItems([]);
+      setPeople({});
+      return;
+    }
+    let active = true;
     void (async () => {
       const { data } = await supabase.rpc("my_compliments");
       const rows = (data ?? []) as Received[];
+      if (!active) return;
       setItems(rows);
-      setPeople(await fetchProfiles(rows.map((r) => r.sender_id ?? "")));
+      const profiles = await fetchProfiles(
+        rows.map((r) => r.sender_id ?? ""),
+        { viewerId },
+      );
+      if (active) setPeople(profiles);
     })();
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [viewerId]);
 
   if (items.length === 0) return null;
   return (

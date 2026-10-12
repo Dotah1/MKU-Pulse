@@ -176,7 +176,7 @@ function MessagesPage() {
           return next;
         });
         const otherIds = rows.map((row) => (row.user_a === user.id ? row.user_b : row.user_a));
-        const profiles = await fetchProfiles(otherIds);
+        const profiles = await fetchProfiles(otherIds, { viewerId: user.id });
         setPeople((current) => ({ ...current, ...profiles }));
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Could not load conversations");
@@ -236,7 +236,7 @@ function MessagesPage() {
         return next;
       });
       const otherId = row.user_a === user.id ? row.user_b : row.user_a;
-      const profiles = await fetchProfiles([otherId]);
+      const profiles = await fetchProfiles([otherId], { viewerId: user.id });
       if (active) setPeople((current) => ({ ...current, ...profiles }));
     })();
     return () => {

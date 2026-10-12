@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TIER_LIMITS, sanitizeText, timeAgo, type Tier } from "@/lib/campus";
-import { fetchProfiles, type MiniProfile } from "@/lib/campus-data";
+import { fetchProfiles, invalidateProfileCache, type MiniProfile } from "@/lib/campus-data";
 import { compressAnnouncementImageFile, uploadFile } from "@/lib/storage";
 import { AdminMkuVerify } from "@/components/AdminMkuVerify";
 
@@ -184,14 +184,17 @@ function AdminPage() {
       matches: matches.count ?? 0,
     });
     setPeople(
-      await fetchProfiles([
-        ...pay.map((x) => x.user_id),
-        ...mapp.map((x) => x.user_id),
-        ...rep.map((x) => x.reporter_id),
-      ]),
+      await fetchProfiles(
+        [
+          ...pay.map((x) => x.user_id),
+          ...mapp.map((x) => x.user_id),
+          ...rep.map((x) => x.reporter_id),
+        ],
+        user ? { viewerId: user.id } : {},
+      ),
     );
     setLoading(false);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (isAdmin) void load();
@@ -273,6 +276,7 @@ function AdminPage() {
         .update({ tier: row.tier, tier_expires_at: expires, pending_tier: null })
         .eq("id", row.user_id);
       if (pErr) toast.error(pErr.message);
+      else invalidateProfileCache([row.user_id]);
     }
     toast.success(approve ? "Payment approved" : "Payment rejected");
     void notify({
@@ -337,6 +341,7 @@ function AdminPage() {
           .update({ is_banned: true })
           .eq("id", row.target_id);
         if (error) throw error;
+        invalidateProfileCache([row.target_id]);
       }
       const { error } = await supabase
         .from("reports")
@@ -480,6 +485,7 @@ function AdminPage() {
       toast.error(error.message);
       return;
     }
+    invalidateProfileCache([id]);
     setFound((list) => list.map((u) => (u.id === id ? { ...u, ...patch } : u)));
     toast.success("Member updated");
   };

@@ -50,6 +50,7 @@ interface FeedMemoryCache {
   hasMorePosts: boolean;
   postsOffset: number;
   knownPostIds: string[];
+  newestPostIdSeen: string | null;
   pendingNewPostIds: string[];
   activeFilter: FeedFilter;
   lastNewPostCheckAt: number;
@@ -179,11 +180,12 @@ function FeedPage() {
   const postsOffset = useRef(0);
   const feedGeneration = useRef(0);
   const knownPostIds = useRef(new Set<string>());
+  const newestPostIdSeen = useRef<string | null>(null);
   const pendingNewPostIds = useRef(new Set<string>());
   const hasLoadedFeed = useRef(false);
   const checkingForNewPosts = useRef(false);
   const lastNewPostCheck = useRef(feedLastNewPostCheckAt);
-  const authors = usePostAuthors(posts);
+  const authors = usePostAuthors(posts, user?.id ?? null);
   const filteredPosts = useMemo(
     () => posts.filter((post) => postMatchesFilter(post, activeFilter)),
     [posts, activeFilter],
@@ -201,7 +203,7 @@ function FeedPage() {
       let pollData: { polls: PollRow[]; options: Record<string, PollOptionRow[]> } | null = null;
       let loadedMetrics: Record<string, PostCardMetrics> | null = null;
       try {
-        const [postResult, loadedPolls] = await Promise.all([
+        const [postResult, loadedPolls, newestPostResult] = await Promise.all([
           supabase
             .from("posts")
             .select(
@@ -211,10 +213,20 @@ function FeedPage() {
             .order("created_at", { ascending: false })
             .range(0, pageSize - 1),
           fetchFeedPolls(),
+          supabase
+            .from("posts")
+            .select("id")
+            .order("created_at", { ascending: false })
+            .order("id", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
         ]);
         data = (postResult.data ?? []) as PostRow[];
         error = postResult.error;
         pollData = loadedPolls;
+        if (!newestPostResult.error) {
+          newestPostIdSeen.current = newestPostResult.data?.id ?? null;
+        }
       } catch (loadError) {
         if (generation !== feedGeneration.current) return;
         toast.error(loadError instanceof Error ? loadError.message : "Could not refresh the feed");
@@ -257,6 +269,7 @@ function FeedPage() {
           hasMorePosts: (data?.length ?? 0) === pageSize,
           postsOffset: data?.length ?? 0,
           knownPostIds: (data ?? []).map((post) => post.id),
+          newestPostIdSeen: newestPostIdSeen.current,
           pendingNewPostIds: [...pendingNewPostIds.current],
           activeFilter: feedMemoryCache?.userId === user.id ? feedMemoryCache.activeFilter : "all",
           lastNewPostCheckAt: lastNewPostCheck.current,
@@ -318,6 +331,7 @@ function FeedPage() {
       hasMorePosts,
       postsOffset: postsOffset.current,
       knownPostIds: [...knownPostIds.current],
+      newestPostIdSeen: newestPostIdSeen.current,
       pendingNewPostIds: [...pendingNewPostIds.current],
       activeFilter,
       lastNewPostCheckAt: lastNewPostCheck.current,
@@ -350,11 +364,30 @@ function FeedPage() {
       feedMemoryCache = { ...feedMemoryCache, lastNewPostCheckAt: lastNewPostCheck.current };
     }
     try {
+      const { data: newestPost, error: newestPostError } = await supabase
+        .from("posts")
+        .select("id")
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (newestPostError || !newestPost) return;
+
+      const previousNewestId = newestPostIdSeen.current;
+      if (!previousNewestId) {
+        newestPostIdSeen.current = newestPost.id;
+        if (feedMemoryCache?.userId === user.id) {
+          feedMemoryCache = { ...feedMemoryCache, newestPostIdSeen: newestPost.id };
+        }
+        return;
+      }
+      if (newestPost.id === previousNewestId) return;
+
       const { data, error } = await supabase
         .from("posts")
         .select("id")
-        .order("is_announcement", { ascending: false })
         .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
         .range(0, POSTS_PAGE_SIZE - 1);
       if (error) return;
 
@@ -362,6 +395,10 @@ function FeedPage() {
         if (!knownPostIds.current.has(post.id)) {
           pendingNewPostIds.current.add(post.id);
         }
+      }
+      newestPostIdSeen.current = newestPost.id;
+      if (feedMemoryCache?.userId === user.id) {
+        feedMemoryCache = { ...feedMemoryCache, newestPostIdSeen: newestPost.id };
       }
       setNewPostCount(pendingNewPostIds.current.size);
     } finally {
@@ -382,6 +419,7 @@ function FeedPage() {
       setNewPostCount(cached.pendingNewPostIds.length);
       postsOffset.current = cached.postsOffset;
       knownPostIds.current = new Set(cached.knownPostIds);
+      newestPostIdSeen.current = cached.newestPostIdSeen;
       pendingNewPostIds.current = new Set(cached.pendingNewPostIds);
       lastNewPostCheck.current = cached.lastNewPostCheckAt;
       feedLastNewPostCheckAt = cached.lastNewPostCheckAt;

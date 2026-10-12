@@ -169,10 +169,10 @@ function ProfilePage() {
     ]);
     setSaving(false);
     const failure = error ?? cErr;
+    if (!error) await refreshProfile();
     if (failure) toast.error(failure.message);
     else {
       toast.success("Profile updated");
-      await refreshProfile();
     }
   };
 

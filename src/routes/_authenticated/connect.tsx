@@ -18,6 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  getConnectDeckSnapshot,
+  saveConnectDeckSnapshot,
+  updateConnectDeckSnapshot,
+} from "@/lib/connect-cache";
+import {
   calculateRoommateCompatibility,
   fetchConnectCandidates,
   fetchDailyUserQuotaUsage,
@@ -56,11 +61,52 @@ const CANDIDATE_PAGE_SIZE = 20;
 // Keep candidate reads batched while limiting the visible/interactive stack.
 const MAX_VISIBLE_PROFILES = 5;
 const SWIPE_EXIT_FALLBACK_MS = 520;
+const CONNECT_QUOTA_CACHE_TTL_MS = 60 * 1000;
 
 interface SwipeRow {
   swipee_id: string;
   action: SwipeAction;
   created_at: string;
+}
+
+function localQuotaDayKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Nairobi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values["year"]}-${values["month"]}-${values["day"]}`;
+}
+
+async function fetchSwipeUsage(userId: string) {
+  const { data, error } = await fetchDailyUserQuotaUsage();
+  const usage = data?.[0];
+  if (!error && usage) {
+    return { swipesToday: usage.swipes_count, superToday: usage.super_likes_count };
+  }
+
+  // Keep preview/older environments functional while the quota migration is rolling out.
+  const [swipeCountResult, superLikeCountResult] = await Promise.all([
+    supabase
+      .from("swipes")
+      .select("id", { count: "exact", head: true })
+      .eq("swiper_id", userId)
+      .gte("created_at", startOfToday()),
+    supabase
+      .from("swipes")
+      .select("id", { count: "exact", head: true })
+      .eq("swiper_id", userId)
+      .eq("action", "super_like")
+      .gte("created_at", startOfToday()),
+  ]);
+  if (swipeCountResult.error) toast.error(swipeCountResult.error.message);
+  if (superLikeCountResult.error) toast.error(superLikeCountResult.error.message);
+  return {
+    swipesToday: swipeCountResult.count ?? 0,
+    superToday: superLikeCountResult.count ?? 0,
+  };
 }
 
 function ConnectPage() {
@@ -93,16 +139,54 @@ function ConnectPage() {
   const matchesRequestGeneration = useRef(0);
   const historyRequestGeneration = useRef(0);
 
+  const refreshQuotaUsage = useCallback(
+    async (userId: string) => {
+      const usage = await fetchSwipeUsage(userId);
+      if (user?.id !== userId) return;
+      const quotaDay = localQuotaDayKey();
+      const quotaFetchedAt = Date.now();
+      setSwipesToday(usage.swipesToday);
+      setSuperToday(usage.superToday);
+      updateConnectDeckSnapshot(userId, (snapshot) => ({
+        ...snapshot,
+        ...usage,
+        quotaDay,
+        quotaFetchedAt,
+      }));
+    },
+    [user?.id],
+  );
+
   const loadDeck = useCallback(async () => {
     if (!user) return;
+    const cached = getConnectDeckSnapshot(user.id);
+    if (cached) {
+      const pendingIds = new Set(cached.pendingSwipeIds);
+      setDeck(cached.deck.filter((person) => !pendingIds.has(person.id)));
+      setHasMoreCandidates(cached.hasMore);
+      candidateCursor.current = cached.cursor;
+      seenProfileIds.current = new Set(cached.seenProfileIds);
+      queuedProfileIds.current = new Set(cached.queuedProfileIds);
+      setSwipesToday(cached.swipesToday);
+      setSuperToday(cached.superToday);
+      setLoading(false);
+      if (
+        cached.quotaDay !== localQuotaDayKey() ||
+        Date.now() - cached.quotaFetchedAt >= CONNECT_QUOTA_CACHE_TTL_MS
+      ) {
+        void refreshQuotaUsage(user.id);
+      }
+      return;
+    }
+
     setLoading(true);
     setHasMoreCandidates(true);
     candidateCursor.current = null;
     queuedProfileIds.current = new Set<string>();
     seenProfileIds.current = new Set([user.id]);
-    const [candidateResult, quotaUsageResult] = await Promise.all([
+    const [candidateResult, quotaUsage] = await Promise.all([
       fetchConnectCandidates(null, CANDIDATE_PAGE_SIZE + 1),
-      fetchDailyUserQuotaUsage(),
+      fetchSwipeUsage(user.id),
     ]);
     const { data, error } = candidateResult;
     if (error) {
@@ -118,34 +202,29 @@ function ConnectPage() {
     candidateCursor.current = rows.at(-1)?.id ?? null;
     const list = rows;
     queuedProfileIds.current = new Set(list.map((person) => person.id));
-    setDeck(list.sort(() => Math.random() - 0.5));
-    setHasMoreCandidates(fetched.length > CANDIDATE_PAGE_SIZE);
-    const quotaUsage = quotaUsageResult.data?.[0];
-    if (!quotaUsageResult.error && quotaUsage) {
-      setSwipesToday(quotaUsage.swipes_count);
-      setSuperToday(quotaUsage.super_likes_count);
-    } else {
-      // Fallback for previews where the quota migration has not yet been applied.
-      const [swipeCountResult, superLikeCountResult] = await Promise.all([
-        supabase
-          .from("swipes")
-          .select("id", { count: "exact", head: true })
-          .eq("swiper_id", user.id)
-          .gte("created_at", startOfToday()),
-        supabase
-          .from("swipes")
-          .select("id", { count: "exact", head: true })
-          .eq("swiper_id", user.id)
-          .eq("action", "super_like")
-          .gte("created_at", startOfToday()),
-      ]);
-      setSwipesToday(swipeCountResult.count ?? 0);
-      setSuperToday(superLikeCountResult.count ?? 0);
-      if (swipeCountResult.error) toast.error(swipeCountResult.error.message);
-      if (superLikeCountResult.error) toast.error(superLikeCountResult.error.message);
-    }
+    const randomizedList = [...list].sort(() => Math.random() - 0.5);
+    const hasMore = fetched.length > CANDIDATE_PAGE_SIZE;
+    const quotaDay = localQuotaDayKey();
+    const quotaFetchedAt = Date.now();
+    setDeck(randomizedList);
+    setHasMoreCandidates(hasMore);
+    setSwipesToday(quotaUsage.swipesToday);
+    setSuperToday(quotaUsage.superToday);
+    saveConnectDeckSnapshot(user.id, {
+      cachedAt: Date.now(),
+      deck: randomizedList,
+      cursor: candidateCursor.current,
+      hasMore,
+      seenProfileIds: [...seenProfileIds.current],
+      queuedProfileIds: [...queuedProfileIds.current],
+      pendingSwipeIds: [],
+      swipesToday: quotaUsage.swipesToday,
+      superToday: quotaUsage.superToday,
+      quotaDay,
+      quotaFetchedAt,
+    });
     setLoading(false);
-  }, [user]);
+  }, [refreshQuotaUsage, user]);
 
   const loadMoreCandidates = async () => {
     if (!user || loadingMoreCandidates || !hasMoreCandidates) return;
@@ -159,7 +238,8 @@ function ConnectPage() {
       const fetched = data ?? [];
       const rows = fetched.slice(0, CANDIDATE_PAGE_SIZE) as MiniProfile[];
       candidateCursor.current = rows.at(-1)?.id ?? candidateCursor.current;
-      setHasMoreCandidates(fetched.length > CANDIDATE_PAGE_SIZE);
+      const hasMore = fetched.length > CANDIDATE_PAGE_SIZE;
+      setHasMoreCandidates(hasMore);
       const next = rows
         .filter(
           (person) =>
@@ -168,6 +248,19 @@ function ConnectPage() {
         .sort(() => Math.random() - 0.5);
       for (const person of next) queuedProfileIds.current.add(person.id);
       setDeck((currentDeck) => [...currentDeck, ...next]);
+      const snapshot = getConnectDeckSnapshot(user.id);
+      if (snapshot) {
+        const cachedIds = new Set(snapshot.deck.map((person) => person.id));
+        const additions = next.filter((person) => !cachedIds.has(person.id));
+        saveConnectDeckSnapshot(user.id, {
+          ...snapshot,
+          deck: [...snapshot.deck, ...additions],
+          cursor: candidateCursor.current,
+          hasMore,
+          seenProfileIds: [...seenProfileIds.current],
+          queuedProfileIds: [...queuedProfileIds.current],
+        });
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not load more candidates");
     } finally {
@@ -193,7 +286,7 @@ function ConnectPage() {
       );
       setMatches(rows);
       const others = rows.map((match) => (match.user_a === user.id ? match.user_b : match.user_a));
-      const profiles = await fetchProfiles(others);
+      const profiles = await fetchProfiles(others, { viewerId: user.id });
       if (generation === matchesRequestGeneration.current) setMatchProfiles(profiles);
     } catch (error) {
       if (generation === matchesRequestGeneration.current) {
@@ -219,7 +312,10 @@ function ConnectPage() {
       if (generation !== historyRequestGeneration.current) return;
       const rows = (data ?? []) as SwipeRow[];
       setSwipeHistory(rows);
-      const profiles = await fetchProfiles(rows.map((row) => row.swipee_id));
+      const profiles = await fetchProfiles(
+        rows.map((row) => row.swipee_id),
+        { viewerId: user.id },
+      );
       if (generation === historyRequestGeneration.current) setHistoryProfiles(profiles);
     } catch (error) {
       if (generation === historyRequestGeneration.current) {
@@ -278,15 +374,53 @@ function ConnectPage() {
     : null;
   const outOfSwipes = swipesToday >= limits.swipesPerDay;
 
+  const settleSwipeCache = (action: SwipeAction, person: MiniProfile, succeeded: boolean) => {
+    if (!user) return;
+    const quotaDay = localQuotaDayKey();
+    const quotaFetchedAt = Date.now();
+    updateConnectDeckSnapshot(user.id, (snapshot) => {
+      const pendingSwipeIds = snapshot.pendingSwipeIds.filter((id) => id !== person.id);
+      const queued = new Set(snapshot.queuedProfileIds);
+      const seen = new Set(snapshot.seenProfileIds);
+      let swipes = snapshot.quotaDay === quotaDay ? snapshot.swipesToday : 0;
+      let superLikes = snapshot.quotaDay === quotaDay ? snapshot.superToday : 0;
+      let nextDeck = snapshot.deck.filter((item) => item.id !== person.id);
+
+      if (succeeded) {
+        queued.delete(person.id);
+        seen.add(person.id);
+        swipes = Math.max(swipes, swipesToday) + 1;
+        if (action === "super_like") superLikes = Math.max(superLikes, superToday) + 1;
+      } else {
+        queued.add(person.id);
+        nextDeck = [person, ...nextDeck];
+      }
+
+      return {
+        ...snapshot,
+        deck: nextDeck,
+        seenProfileIds: [...seen],
+        queuedProfileIds: [...queued],
+        pendingSwipeIds,
+        swipesToday: swipes,
+        superToday: superLikes,
+        quotaDay,
+        quotaFetchedAt,
+      };
+    });
+  };
+
   const commitSwipe = async (action: SwipeAction, person: MiniProfile) => {
     if (!user) return;
     if (outOfSwipes) {
       setDeck((items) => [person, ...items.filter((item) => item.id !== person.id)]);
+      settleSwipeCache(action, person, false);
       toast.error(`Daily swipe limit reached on the ${limits.label} plan`);
       return;
     }
     if (action === "super_like" && superToday >= limits.superLikesPerDay) {
       setDeck((items) => [person, ...items.filter((item) => item.id !== person.id)]);
+      settleSwipeCache(action, person, false);
       toast.error("No super likes left today");
       return;
     }
@@ -295,12 +429,14 @@ function ConnectPage() {
       .insert({ swiper_id: user.id, swipee_id: person.id, action });
     if (error) {
       setDeck((items) => [person, ...items.filter((item) => item.id !== person.id)]);
+      settleSwipeCache(action, person, false);
       toast.error(error.message);
       return;
     }
     seenProfileIds.current.add(person.id);
     setSwipesToday((count) => count + 1);
     if (action === "super_like") setSuperToday((count) => count + 1);
+    settleSwipeCache(action, person, true);
     if (action !== "pass") {
       // The database creates the match on a mutual like — tell them if it happened.
       const [a, b] = user.id < person.id ? [user.id, person.id] : [person.id, user.id];
@@ -334,6 +470,12 @@ function ConnectPage() {
     }
     setExitAction(null);
     setDragX(0);
+    if (user) {
+      updateConnectDeckSnapshot(user.id, (snapshot) => ({
+        ...snapshot,
+        pendingSwipeIds: [...new Set([...snapshot.pendingSwipeIds, pending.person.id])],
+      }));
+    }
     setDeck((items) => items.filter((person) => person.id !== pending.person.id));
     void commitSwipe(pending.action, pending.person);
   };

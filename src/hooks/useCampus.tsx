@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { invalidateProfileCache, setProfileCacheUser } from "@/lib/campus-data";
 import { disablePush } from "@/lib/push";
 import {
   ADMIN_EMAIL,
@@ -108,7 +109,13 @@ export function CampusProvider({ children }: { children: ReactNode }) {
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo>(DEFAULT_PAYMENT_INFO);
 
   const loadProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    const { data } = await supabase
+      .from("profiles")
+      .select(
+        "id, full_name, year_of_study, major, avatar_url, bio, interests, gender, tier, tier_expires_at, pending_tier, is_banned, post_block_until, notifications_enabled, is_private, created_at",
+      )
+      .eq("id", userId)
+      .maybeSingle();
     const p = (data as Profile | null) ?? null;
     setProfile(p);
     // Auto-downgrade once a paid tier has lapsed.
@@ -117,6 +124,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
         .from("profiles")
         .update({ tier: "free", tier_expires_at: null })
         .eq("id", userId);
+      invalidateProfileCache([userId]);
       setProfile({ ...p, tier: "free", tier_expires_at: null });
     }
   }, []);
@@ -130,10 +138,12 @@ export function CampusProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      setProfileCacheUser(s?.user.id ?? null);
       setSession(s);
       if (!s) setProfile(null);
     });
     supabase.auth.getSession().then(({ data }) => {
+      setProfileCacheUser(data.session?.user.id ?? null);
       setSession(data.session);
       setLoading(false);
     });
@@ -169,7 +179,10 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     void (async () => {
       const { uploadPendingAvatar } = await import("@/lib/pending-avatar");
       const done = await uploadPendingAvatar(uid);
-      if (done && !cancelled) await loadProfile(uid);
+      if (done && !cancelled) {
+        invalidateProfileCache([uid]);
+        await loadProfile(uid);
+      }
     })();
     return () => {
       cancelled = true;
@@ -193,7 +206,10 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       limits: TIER_LIMITS[tier],
       refreshProfile: async (userId) => {
         const id = userId ?? session?.user.id;
-        if (id) await loadProfile(id);
+        if (id) {
+          invalidateProfileCache([id]);
+          await loadProfile(id);
+        }
       },
       refreshSettings: () => loadSettings(true),
       setFreeAccessModeLocal: (enabled) => {

@@ -6,6 +6,107 @@ export type MiniProfile = Pick<
   "id" | "full_name" | "avatar_url" | "major" | "year_of_study" | "bio" | "interests" | "tier"
 >;
 
+const PROFILE_CACHE_TTL_MS = 10 * 60 * 1000;
+const PROFILE_CACHE_MAX_ENTRIES = 500;
+export const POST_AUTHOR_PROFILE_CACHE_MAX_AGE_MS = 2 * 60 * 1000;
+
+interface ProfileCacheEntry {
+  profileId: string;
+  profile: MiniProfile;
+  cachedAt: number;
+}
+
+interface PendingProfileRequest {
+  profileIds: string[];
+  promise: Promise<Record<string, MiniProfile>>;
+}
+
+const profileCache = new Map<string, ProfileCacheEntry>();
+const pendingProfileRequests = new Map<string, PendingProfileRequest>();
+let activeProfileCacheUserId: string | null = null;
+let profileAuthStateObserved = false;
+
+function profileCacheKey(userId: string, profileId: string) {
+  return JSON.stringify([userId, profileId]);
+}
+
+/** Keep in-memory profile data isolated to the currently authenticated browser user. */
+export function setProfileCacheUser(userId: string | null) {
+  profileAuthStateObserved = true;
+  if (activeProfileCacheUserId === userId) return;
+  activeProfileCacheUserId = userId;
+  profileCache.clear();
+  pendingProfileRequests.clear();
+}
+
+function cacheProfile(userId: string, profile: MiniProfile) {
+  const key = profileCacheKey(userId, profile.id);
+  profileCache.delete(key);
+  profileCache.set(key, { profileId: profile.id, profile, cachedAt: Date.now() });
+
+  const now = Date.now();
+  for (const [entryKey, entry] of profileCache) {
+    if (now - entry.cachedAt >= PROFILE_CACHE_TTL_MS) profileCache.delete(entryKey);
+  }
+  while (profileCache.size > PROFILE_CACHE_MAX_ENTRIES) {
+    const oldestKey = profileCache.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    profileCache.delete(oldestKey);
+  }
+}
+
+function getCachedProfile(userId: string, profileId: string, maxAgeMs: number): MiniProfile | null {
+  if (activeProfileCacheUserId !== userId) return null;
+  const key = profileCacheKey(userId, profileId);
+  const entry = profileCache.get(key);
+  if (!entry) return null;
+  const age = Date.now() - entry.cachedAt;
+  if (age >= PROFILE_CACHE_TTL_MS) {
+    profileCache.delete(key);
+    return null;
+  }
+  if (age >= maxAgeMs) return null;
+
+  // Refresh insertion order so eviction behaves like a small LRU cache.
+  profileCache.delete(key);
+  profileCache.set(key, entry);
+  return entry.profile;
+}
+
+/** Read any currently cached profile rows without starting a network request. */
+export function getCachedProfiles(
+  ids: string[],
+  viewerId: string,
+  maxAgeMs = PROFILE_CACHE_TTL_MS,
+): Record<string, MiniProfile> {
+  const maxAge = Math.max(0, Math.min(PROFILE_CACHE_TTL_MS, maxAgeMs));
+  const result: Record<string, MiniProfile> = {};
+  for (const id of new Set(ids.filter(Boolean))) {
+    const profile = getCachedProfile(viewerId, id, maxAge);
+    if (profile) result[id] = profile;
+  }
+  return result;
+}
+
+/** Invalidate selected profile entries, or the entire cache when no IDs are supplied. */
+export function invalidateProfileCache(ids?: string[]) {
+  if (!ids) {
+    profileCache.clear();
+    pendingProfileRequests.clear();
+    return;
+  }
+  const invalidatedIds = new Set(ids.filter(Boolean));
+  if (invalidatedIds.size === 0) return;
+  for (const [key, entry] of profileCache) {
+    if (invalidatedIds.has(entry.profileId)) profileCache.delete(key);
+  }
+  for (const [key, request] of pendingProfileRequests) {
+    if (request.profileIds.some((id) => invalidatedIds.has(id))) {
+      pendingProfileRequests.delete(key);
+    }
+  }
+}
+
 export interface PostCardMetrics {
   post_id: string;
   like_count: number;
@@ -185,16 +286,79 @@ export function calculateRoommateCompatibility(
   return { percentage: sameYear ? 78 : 68, sharedInterests };
 }
 
-export async function fetchProfiles(ids: string[]): Promise<Record<string, MiniProfile>> {
+export async function fetchProfiles(
+  ids: string[],
+  options: { maxAgeMs?: number; viewerId?: string } = {},
+): Promise<Record<string, MiniProfile>> {
   const unique = [...new Set(ids)].filter(Boolean);
   if (unique.length === 0) return {};
-  const { data } = await supabase
-    .from("profiles")
-    .select("id, full_name, avatar_url, major, year_of_study, bio, interests, tier")
-    .in("id", unique);
-  const map: Record<string, MiniProfile> = {};
-  for (const row of (data ?? []) as MiniProfile[]) map[row.id] = row;
-  return map;
+
+  const viewerId = options.viewerId ?? null;
+  if (viewerId && !profileAuthStateObserved && activeProfileCacheUserId === null) {
+    activeProfileCacheUserId = viewerId;
+  }
+  const canUseCache = Boolean(viewerId && activeProfileCacheUserId === viewerId);
+
+  const maxAge = Math.max(
+    0,
+    Math.min(PROFILE_CACHE_TTL_MS, options.maxAgeMs ?? PROFILE_CACHE_TTL_MS),
+  );
+  const cached = canUseCache && viewerId ? getCachedProfiles(unique, viewerId, maxAge) : {};
+  const missing = unique.filter((id) => !cached[id]).sort();
+  if (missing.length === 0) return cached;
+
+  if (!canUseCache || !viewerId) {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url, major, year_of_study, bio, interests, tier")
+        .in("id", missing);
+      if (error) return cached;
+      for (const row of (data ?? []) as MiniProfile[]) cached[row.id] = row;
+    } catch {
+      return cached;
+    }
+    return cached;
+  }
+
+  const requestKey = JSON.stringify([viewerId, missing]);
+  let request = pendingProfileRequests.get(requestKey);
+  if (!request) {
+    const entry: PendingProfileRequest = { profileIds: missing, promise: Promise.resolve({}) };
+    entry.promise = (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url, major, year_of_study, bio, interests, tier")
+          .in("id", missing);
+        if (error) return {};
+
+        const result: Record<string, MiniProfile> = {};
+        for (const row of (data ?? []) as MiniProfile[]) {
+          result[row.id] = row;
+          if (
+            activeProfileCacheUserId === viewerId &&
+            pendingProfileRequests.get(requestKey) === entry
+          ) {
+            cacheProfile(viewerId, row);
+          }
+        }
+        return result;
+      } catch {
+        return {};
+      }
+    })();
+    pendingProfileRequests.set(requestKey, entry);
+    request = entry;
+  }
+
+  try {
+    return { ...cached, ...(await request.promise) };
+  } finally {
+    if (pendingProfileRequests.get(requestKey) === request) {
+      pendingProfileRequests.delete(requestKey);
+    }
+  }
 }
 
 /** Fetch interaction counts and viewer flags for a page of posts in one request. */

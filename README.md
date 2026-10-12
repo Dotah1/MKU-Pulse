@@ -27,7 +27,7 @@ bun run lint
 ## Services
 
 - **Supabase** provides authentication, Postgres, row-level security, realtime, and legacy media storage. Database changes are tracked under `supabase/migrations/`.
-- **Cloudflare R2** stores newer media through the Worker source at `infra/cloudflare/mku-pulse-media-worker.ts`. Set `VITE_R2_MEDIA_WORKER_URL` in local/server environments to enable it; leave blank to use Supabase Storage for new media.
+- **Cloudflare R2** stores newer media through the Worker source at `infra/cloudflare/mku-pulse-media-worker.ts`. Production uploads require `VITE_R2_MEDIA_WORKER_URL`; Supabase Storage fallback is available only in local development when `VITE_ALLOW_SUPABASE_MEDIA_FALLBACK=true`.
 - **Scheduled post cleanup** runs through Vercel Cron. It uses the `PURGE_EXPIRED_POSTS_SECRET` or `CRON_SECRET` and deletes expired post media from Supabase Storage and R2. R2 cleanup additionally requires a server-only `R2_MEDIA_CLEANUP_SECRET` in Vercel and the matching secret binding on the Cloudflare Worker.
 
 Copy `.env.example` as a reference for local environment variables. Never commit real credentials or secret values. The Android wrapper is in `twa/`; its host and asset links must stay aligned with the live app domain.

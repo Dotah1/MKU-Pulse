@@ -12,6 +12,18 @@ const MAX_AVATAR_BYTES = 512 * 1024;
 const ALLOWED_AVATAR_TYPES = new Set(["image/jpeg", "image/webp"]);
 const MAX_CLEANUP_PATHS = 200;
 const TOKEN_TTL_SECONDS = 60 * 60;
+const MAX_MEDIA_EDGE_CACHE_TTL_SECONDS = 5 * 60;
+
+interface WorkerExecutionContext {
+  waitUntil(promise: Promise<unknown>): void;
+}
+
+interface MediaObjectBody {
+  body: ReadableStream;
+  size: number;
+  httpEtag: string;
+  writeHttpMetadata(headers: Headers): void;
+}
 
 function corsHeaders(origin: string | null): Headers {
   const headers = new Headers({
@@ -97,16 +109,17 @@ async function createToken(path: string, env: Env): Promise<string> {
   return `${expires}.${toBase64Url(signature)}`;
 }
 
-async function validToken(path: string, token: string, env: Env): Promise<boolean> {
+async function validTokenExpiry(path: string, token: string, env: Env): Promise<number | null> {
   const [expiresText, signatureText] = token.split(".");
   const expires = Number(expiresText);
-  if (!expires || expires < Math.floor(Date.now() / 1000) || !signatureText) return false;
-  return crypto.subtle.verify(
+  if (!expires || expires <= Math.floor(Date.now() / 1000) || !signatureText) return null;
+  const valid = await crypto.subtle.verify(
     "HMAC",
     await signingKey(env),
     fromBase64Url(signatureText),
     new TextEncoder().encode(`${path}:${expires}`),
   );
+  return valid ? expires : null;
 }
 
 function decodeR2Path(value: string): string | null {
@@ -116,6 +129,51 @@ function decodeR2Path(value: string): string | null {
   if (parts.length !== 3 || !ALLOWED_BUCKETS.has(parts[0] ?? "")) return null;
   if (!parts[1] || !parts[2] || parts.some((part) => part.includes(".."))) return null;
   return path;
+}
+
+function mediaCacheKey(request: Request, markedPath: string): Request {
+  const url = new URL(request.url);
+  url.pathname = "/media";
+  url.search = "";
+  url.searchParams.set("path", markedPath);
+  return new Request(url.toString(), { method: "GET" });
+}
+
+function responseFromObject(object: MediaObjectBody, ttlSeconds: number): Response {
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("ETag", object.httpEtag);
+  if (!headers.has("Content-Length")) headers.set("Content-Length", String(object.size));
+  headers.set(
+    "Cache-Control",
+    ttlSeconds > 0 ? `public, max-age=${ttlSeconds}` : "private, no-store",
+  );
+  headers.delete("Set-Cookie");
+  headers.delete("Vary");
+  headers.delete("Access-Control-Allow-Origin");
+  return new Response(object.body, { headers });
+}
+
+function clientMediaResponse(response: Response, origin: string | null): Response {
+  const headers = new Headers(response.headers);
+  const cors = corsHeaders(origin);
+  for (const name of [
+    "Access-Control-Allow-Headers",
+    "Access-Control-Allow-Methods",
+    "Access-Control-Allow-Origin",
+    "Vary",
+  ]) {
+    const value = cors.get(name);
+    if (value) headers.set(name, value);
+    else headers.delete(name);
+  }
+  // The Worker cache stores a separate public response; browsers must not retain private media.
+  headers.set("Cache-Control", "private, no-store");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 async function deleteExpiredMedia(request: Request, env: Env): Promise<Response> {
@@ -149,6 +207,16 @@ async function deleteExpiredMedia(request: Request, env: Env): Promise<Response>
   }
 
   await env.MEDIA.delete(objectKeys as string[]);
+  // Cache API deletion is local to this data center; the five-minute TTL is the global fallback.
+  await Promise.all(
+    paths.map(async (markedPath) => {
+      try {
+        await caches.default.delete(mediaCacheKey(request, markedPath));
+      } catch {
+        // Deletion from the current edge is best-effort; entries expire within five minutes.
+      }
+    }),
+  );
   return json({ deleted: objectKeys.length });
 }
 
@@ -163,7 +231,11 @@ function extensionFor(file: File): string {
   return extensions[file.type] ?? file.name.split(".").pop()?.toLowerCase() ?? "bin";
 }
 
-async function handle(request: Request, env: Env): Promise<Response> {
+async function handle(
+  request: Request,
+  env: Env,
+  context: WorkerExecutionContext,
+): Promise<Response> {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
   if (request.method === "OPTIONS")
@@ -230,15 +302,35 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const markedPath = url.searchParams.get("path") ?? "";
     const token = url.searchParams.get("token") ?? "";
     const path = decodeR2Path(markedPath);
-    if (!path || !(await validToken(markedPath, token, env)))
-      return json({ error: "Invalid media URL" }, 401, origin);
+    const tokenExpiry = path ? await validTokenExpiry(markedPath, token, env) : null;
+    if (!path || !tokenExpiry) return json({ error: "Invalid media URL" }, 401, origin);
+
+    const hasRange = request.headers.has("Range");
+    const key = mediaCacheKey(request, markedPath);
+    if (!hasRange) {
+      try {
+        const cached = await caches.default.match(key);
+        if (cached) return clientMediaResponse(cached, origin);
+      } catch {
+        // R2 remains the source of truth if an edge-cache lookup fails.
+      }
+    }
+
     const object = await env.MEDIA.get(path);
     if (!object) return new Response("Not found", { status: 404, headers: corsHeaders(origin) });
-    const headers = new Headers(corsHeaders(origin));
-    object.writeHttpMetadata(headers);
-    headers.set("ETag", object.httpEtag);
-    headers.set("Cache-Control", "private, max-age=3600");
-    return new Response(object.body, { headers });
+    const remainingTokenSeconds = tokenExpiry - Math.floor(Date.now() / 1000);
+    const ttlSeconds = hasRange
+      ? 0
+      : Math.max(0, Math.min(MAX_MEDIA_EDGE_CACHE_TTL_SECONDS, remainingTokenSeconds));
+    const storedResponse = responseFromObject(object, ttlSeconds);
+    if (ttlSeconds > 0 && object.size <= MAX_UPLOAD_BYTES) {
+      context.waitUntil(
+        caches.default.put(key, storedResponse.clone()).catch(() => {
+          // Cache writes are best-effort and must not interrupt media delivery.
+        }),
+      );
+    }
+    return clientMediaResponse(storedResponse, origin);
   }
 
   if (url.pathname === "/media" && request.method === "DELETE") {
@@ -248,10 +340,20 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const path = decodeR2Path(markedPath);
     if (!path || path.split("/")[1] !== userId) return json({ error: "Invalid path" }, 400, origin);
     await env.MEDIA.delete(path);
+    // Cache API deletion is local to this data center; the five-minute TTL is the global fallback.
+    try {
+      await caches.default.delete(mediaCacheKey(request, markedPath));
+    } catch {
+      // Deletion from the current edge is best-effort; entries expire within five minutes.
+    }
     return json({ ok: true }, 200, origin);
   }
 
   return json({ error: "Not found" }, 404, origin);
 }
 
-export default { fetch: handle };
+export default {
+  fetch(request: Request, env: Env, context: WorkerExecutionContext) {
+    return handle(request, env, context);
+  },
+};

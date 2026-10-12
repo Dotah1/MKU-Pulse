@@ -12,7 +12,7 @@ const MAX_ANNOUNCEMENT_IMAGE_BYTES = 1024 * 1024;
 const IMAGE_QUALITY = 0.8;
 const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
 const ALLOW_SUPABASE_MEDIA_FALLBACK =
-  import.meta.env.DEV || import.meta.env["VITE_ALLOW_SUPABASE_MEDIA_FALLBACK"] === "true";
+  import.meta.env.DEV && import.meta.env["VITE_ALLOW_SUPABASE_MEDIA_FALLBACK"] === "true";
 const R2_MEDIA_WORKER_URL = (
   (import.meta.env["VITE_R2_MEDIA_WORKER_URL"] as string | undefined) ?? ""
 ).replace(/\/$/, "");
@@ -131,7 +131,8 @@ export async function getSignedUrl(
   const generation = authGeneration;
   const request = (async () => {
     try {
-      if (isR2Path(path) && R2_MEDIA_WORKER_URL) {
+      if (isR2Path(path)) {
+        if (!R2_MEDIA_WORKER_URL) return null;
         const authorization = await getAuthorizationHeader();
         if (!authorization) return null;
         const response = await fetch(

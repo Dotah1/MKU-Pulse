@@ -80,7 +80,10 @@ function MentorshipPage() {
     const rows = (data ?? []) as MentorRow[];
     setMentors(rows);
     const [profileMap, verification] = await Promise.all([
-      fetchProfiles(rows.map((r) => r.user_id)),
+      fetchProfiles(
+        rows.map((r) => r.user_id),
+        user ? { viewerId: user.id } : {},
+      ),
       rows.length > 0
         ? supabase
             .from("profiles")
@@ -463,7 +466,12 @@ function IncomingRequests() {
       .order("created_at", { ascending: false });
     const list = (data ?? []) as SessionRequestRow[];
     setRows(list);
-    setPeople(await fetchProfiles(list.map((r) => r.student_id)));
+    setPeople(
+      await fetchProfiles(
+        list.map((r) => r.student_id),
+        { viewerId: user.id },
+      ),
+    );
     setLoading(false);
   }, [user]);
 
