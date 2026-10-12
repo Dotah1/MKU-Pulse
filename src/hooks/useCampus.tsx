@@ -112,7 +112,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase
       .from("profiles")
       .select(
-        "id, full_name, year_of_study, major, avatar_url, bio, interests, gender, tier, tier_expires_at, pending_tier, is_banned, post_block_until, notifications_enabled, is_private, created_at",
+        "id, full_name, year_of_study, major, avatar_url, bio, interests, gender, tier, tier_expires_at, pending_tier, is_banned, post_block_until, notifications_enabled, is_private, created_at, mku_verified",
       )
       .eq("id", userId)
       .maybeSingle();

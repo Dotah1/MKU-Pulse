@@ -349,9 +349,7 @@ function ProfilePage() {
             </section>
           );
         })()}
-      {profile && (
-        <MkuVerifyCard verified={Boolean((profile as { mku_verified?: boolean }).mku_verified)} />
-      )}
+      {profile && <MkuVerifyCard verified={Boolean(profile.mku_verified)} />}
       <header className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 sm:flex sm:gap-4">
         <div className="relative shrink-0">
           <UserAvatar

@@ -46,6 +46,7 @@ export interface Profile {
   notifications_enabled: boolean;
   is_private: boolean;
   created_at: string;
+  mku_verified?: boolean | null;
 }
 
 export interface TierLimits {
