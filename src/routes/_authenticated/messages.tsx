@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "@/lib/toast";
-import { ArrowLeft, GraduationCap, Loader2, Reply, Send, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  GraduationCap,
+  Loader2,
+  Reply,
+  Send,
+  X,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SafetyMenu } from "@/components/SafetyMenu";
 import { isBlockedWith } from "@/lib/blocks";
@@ -474,6 +483,7 @@ function ChatPane({
   const [postDraft, setPostDraft] = useState<PostRef | null>(null);
   const [linkedPosts, setLinkedPosts] = useState<Record<string, PostRef>>({});
   const [sending, setSending] = useState(false);
+  const [retentionNoticeExpanded, setRetentionNoticeExpanded] = useState(true);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
@@ -491,6 +501,12 @@ function ChatPane({
     [conversation, user?.id],
   );
   const [chatBlocked, setChatBlocked] = useState(false);
+  useEffect(() => {
+    setRetentionNoticeExpanded(true);
+    const timeout = window.setTimeout(() => setRetentionNoticeExpanded(false), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [conversation.id]);
+
   useEffect(() => {
     if (!currentUserId) return;
     void isBlockedWith(currentUserId, otherId).then(setChatBlocked);
@@ -984,15 +1000,42 @@ function ChatPane({
         )}
       </header>
 
-      <div
-        role="note"
-        aria-label="Message retention policy"
-        className="shrink-0 border-b border-border bg-muted/40 px-4 py-2 text-xs leading-relaxed text-muted-foreground"
-      >
-        When both participants are on the free plan, messages older than 30 days are deleted. Shared
-        history is kept while either participant has an active paid plan. After the last paid plan
-        expires, there is a 30-day grace period; then messages older than 90 days are eligible for
-        deletion. Messages linked to pending or approved safety reports are retained.
+      <div className="shrink-0 border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+        {retentionNoticeExpanded ? (
+          <div className="flex items-start gap-2">
+            <p role="note" aria-label="Message retention policy" className="flex-1 leading-relaxed">
+              When both participants are on the free plan, messages older than 30 days are deleted.
+              Shared history is kept while either participant has an active paid plan. After the
+              last paid plan expires, there is a 30-day grace period; then messages older than 90
+              days are eligible for deletion. Messages linked to pending or approved safety reports
+              are retained.
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="-mr-2 -mt-1 min-h-9 shrink-0 px-2"
+              aria-label="Collapse message retention policy"
+              aria-expanded="true"
+              onClick={() => setRetentionNoticeExpanded(false)}
+            >
+              <ChevronUp className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="-ml-2 min-h-9 px-2 text-xs"
+            aria-label="Expand message retention policy"
+            aria-expanded="false"
+            onClick={() => setRetentionNoticeExpanded(true)}
+          >
+            Message retention policy
+            <ChevronDown className="ml-1 size-4" aria-hidden="true" />
+          </Button>
+        )}
       </div>
 
       <div ref={messageList} className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
