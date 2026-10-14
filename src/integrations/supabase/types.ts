@@ -708,6 +708,7 @@ export type Database = {
           id: string
           image_url: string | null
           is_announcement: boolean
+          is_permanent: boolean
           updated_at: string
           user_id: string
           video_seconds: number | null
@@ -719,6 +720,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_announcement?: boolean
+          is_permanent?: boolean
           updated_at?: string
           user_id: string
           video_seconds?: number | null
@@ -730,6 +732,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_announcement?: boolean
+          is_permanent?: boolean
           updated_at?: string
           user_id?: string
           video_seconds?: number | null

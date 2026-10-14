@@ -678,6 +678,7 @@ function Composer({
   const [kind, setKind] = useState<"image" | "video" | null>(null);
   const [clipSeconds, setClipSeconds] = useState<number | null>(null);
   const [announcement, setAnnouncement] = useState(false);
+  const [permanent, setPermanent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [preparingKind, setPreparingKind] = useState<"image" | "video" | null>(null);
@@ -807,6 +808,7 @@ function Composer({
         video_url: videoPath,
         video_seconds: videoPath ? (clipSeconds ?? POST_VIDEO_MAX_SECONDS) : null,
         is_announcement: isAdmin ? announcement : false,
+        is_permanent: isAdmin ? permanent : false,
       });
       if (error) throw error;
       uploadedPath = null;
@@ -815,6 +817,7 @@ function Composer({
       setActiveCategory(null);
       clearFile();
       setAnnouncement(false);
+      setPermanent(false);
       toast.success("Posted");
       onPosted();
     } catch (err) {
@@ -940,14 +943,24 @@ function Composer({
         />
 
         {isAdmin && (
-          <label className="flex min-h-11 items-center gap-2 text-sm">
-            <Switch
-              checked={announcement}
-              onCheckedChange={setAnnouncement}
-              aria-label="Post as announcement"
-            />
-            Announcement
-          </label>
+          <>
+            <label className="flex min-h-11 items-center gap-2 text-sm">
+              <Switch
+                checked={announcement}
+                onCheckedChange={setAnnouncement}
+                aria-label="Post as announcement"
+              />
+              Announcement
+            </label>
+            <label className="flex min-h-11 items-center gap-2 text-sm">
+              <Switch
+                checked={permanent}
+                onCheckedChange={setPermanent}
+                aria-label="Keep this post permanently"
+              />
+              Does not expire
+            </label>
+          </>
         )}
 
         <Button

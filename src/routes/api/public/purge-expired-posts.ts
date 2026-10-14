@@ -44,6 +44,7 @@ async function purgeExpiredPosts(request: Request): Promise<Response> {
         .from("posts")
         .select("id, image_url, video_url")
         .lt("created_at", cutoff)
+        .eq("is_permanent", false)
         .order("created_at", { ascending: true })
         .limit(batchSize);
       if (error) throw error;
@@ -102,6 +103,7 @@ async function purgeExpiredPosts(request: Request): Promise<Response> {
         .from("posts")
         .select("id")
         .lt("created_at", cutoff)
+        .eq("is_permanent", false)
         .limit(1);
       if (error) throw error;
       hasMore = Boolean(remaining?.length);
