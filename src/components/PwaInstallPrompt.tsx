@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "@tanstack/react-router";
 import { Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -18,6 +19,7 @@ function isStandalone() {
 }
 
 export function PwaInstallPrompt() {
+  const { pathname } = useLocation();
   const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [installed, setInstalled] = useState(false);
@@ -70,7 +72,7 @@ export function PwaInstallPrompt() {
     if (choice.outcome === "accepted") setInstalled(true);
   };
 
-  if (dismissed || installed || (!installEvent && !ios)) return null;
+  if (pathname === "/" || dismissed || installed || (!installEvent && !ios)) return null;
 
   return (
     <aside
