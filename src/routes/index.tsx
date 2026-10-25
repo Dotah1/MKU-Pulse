@@ -12,15 +12,32 @@ export const Route = createFileRoute("/")({
         content:
           "Connect with fellow MKU students, find mentors, discover opportunities and stay on top of campus updates.",
       },
+      { property: "og:site_name", content: "MKU Pulse" },
       { property: "og:title", content: "MKU Pulse — The digital campus for MKU students" },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      { property: "og:url", content: "https://mku-pulse.vercel.app/" },
+      {
+        property: "og:image",
+        content: "https://mku-pulse.vercel.app/screenshots/mku-pulse-wide.png",
+      },
       {
         property: "og:description",
         content:
           "Connect, find mentors, discover opportunities and get campus updates — all in one app.",
       },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "MKU Pulse — The digital campus for MKU students" },
+      {
+        name: "twitter:description",
+        content:
+          "Connect, find mentors, discover opportunities and get campus updates — all in one app.",
+      },
+      {
+        name: "twitter:image",
+        content: "https://mku-pulse.vercel.app/screenshots/mku-pulse-wide.png",
+      },
     ],
+    links: [{ rel: "canonical", href: "https://mku-pulse.vercel.app/" }],
   }),
   component: Landing,
 });
