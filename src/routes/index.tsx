@@ -6,7 +6,7 @@ import { FirstVisitInstall } from "@/components/FirstVisitInstall";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "MKU Pulse — The digital campus for MKU students" },
+      { title: "MKU Pulse | Mount Kenya University Student App" },
       {
         name: "google-site-verification",
         content: "apGm20aPD_qyHjx1C3s0zdjTbFGxJElNXZtPCM6nvkI",
@@ -14,10 +14,15 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Connect with fellow MKU students, find mentors, discover opportunities and stay on top of campus updates.",
+          "MKU Pulse is the campus app for Mount Kenya University students. Meet classmates, find mentors, explore events and opportunities, and follow campus updates.",
+      },
+      {
+        name: "keywords",
+        content:
+          "MKU Pulse, Mount Kenya University, MKU students, MKU campus app, campus community",
       },
       { property: "og:site_name", content: "MKU Pulse" },
-      { property: "og:title", content: "MKU Pulse — The digital campus for MKU students" },
+      { property: "og:title", content: "MKU Pulse | Mount Kenya University Student App" },
       { property: "og:type", content: "website" },
       { property: "og:url", content: "https://mku-pulse.vercel.app/" },
       {
@@ -25,16 +30,20 @@ export const Route = createFileRoute("/")({
         content: "https://mku-pulse.vercel.app/screenshots/mku-pulse-wide.png",
       },
       {
+        property: "og:image:alt",
+        content: "MKU Pulse, the campus app for Mount Kenya University students",
+      },
+      {
         property: "og:description",
         content:
-          "Connect, find mentors, discover opportunities and get campus updates — all in one app.",
+          "MKU Pulse is the campus app for Mount Kenya University students. Meet classmates, find mentors, explore events and opportunities, and follow campus updates.",
       },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "MKU Pulse — The digital campus for MKU students" },
+      { name: "twitter:title", content: "MKU Pulse | Mount Kenya University Student App" },
       {
         name: "twitter:description",
         content:
-          "Connect, find mentors, discover opportunities and get campus updates — all in one app.",
+          "MKU Pulse is the campus app for Mount Kenya University students. Meet classmates, find mentors, explore events and opportunities, and follow campus updates.",
       },
       {
         name: "twitter:image",
@@ -89,7 +98,7 @@ function Landing() {
             Made for Mount Kenya University students
           </p>
           <h1 className="font-display text-4xl font-bold leading-tight tracking-tight sm:text-6xl">
-            The digital campus for MKU students.
+            MKU Pulse: The campus app for Mount Kenya University students.
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-base text-muted-foreground sm:text-lg">
             Connect with comrades, find a mentor, discover hostels, gigs and deals, and never miss a
