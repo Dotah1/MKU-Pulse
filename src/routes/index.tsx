@@ -8,6 +8,10 @@ export const Route = createFileRoute("/")({
     meta: [
       { title: "MKU Pulse — The digital campus for MKU students" },
       {
+        name: "google-site-verification",
+        content: "apGm20aPD_qyHjx1C3s0zdjTbFGxJElNXZtPCM6nvkI",
+      },
+      {
         name: "description",
         content:
           "Connect with fellow MKU students, find mentors, discover opportunities and stay on top of campus updates.",
