@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { CampusToolsDialog } from "@/components/CampusToolsDialog";
 import { deleteUnattachedMedia } from "@/lib/media.functions";
+import { broadcastAnnouncement } from "@/lib/notifications.functions";
 import { POST_MEDIA_MAX_BYTES, POST_VIDEO_MAX_SECONDS, sanitizeText } from "@/lib/campus";
 import { compressImageFile, compressVideoFile, uploadFile, videoDuration } from "@/lib/storage";
 import {
@@ -811,6 +812,20 @@ function Composer({
         is_permanent: isAdmin ? permanent : false,
       });
       if (error) throw error;
+      if (isAdmin && announcement) {
+        try {
+          await broadcastAnnouncement({
+            data: {
+              title: "New campus announcement",
+              body: text || "A new campus announcement was posted.",
+              durationHours: 168,
+            },
+          });
+        } catch (broadcastError) {
+          console.error("Could not deliver the announcement alert", broadcastError);
+          toast.error("Posted, but the campus alert could not be delivered");
+        }
+      }
       uploadedPath = null;
       saveRecentPostDraft(text);
       setContent("");

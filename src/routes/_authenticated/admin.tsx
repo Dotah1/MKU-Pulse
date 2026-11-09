@@ -364,8 +364,24 @@ function AdminPage() {
       .insert({ user_id: user.id, content: text, is_announcement: true });
     if (error) toast.error(error.message);
     else {
-      setAnnouncement("");
-      toast.success("Announcement published");
+      try {
+        const result = await broadcastAnnouncement({
+          data: {
+            title: "New campus announcement",
+            body: text,
+            durationHours: 168,
+          },
+        });
+        setAnnouncement("");
+        toast.success(
+          result.sent > 0
+            ? `Announcement published and sent to ${result.sent} devices`
+            : "Announcement published; users will see it in the app",
+        );
+      } catch {
+        setAnnouncement("");
+        toast.success("Announcement published; notification delivery will retry on app open");
+      }
     }
   };
 
@@ -615,8 +631,8 @@ function AdminPage() {
         <h2 className="font-display text-base font-semibold">Show a message on next app open</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Students will see this announcement once when they next open MKU Pulse, as long as it
-          hasn't expired. It won't appear for the admin who sends it, and it won't send a phone or
-          browser notification.
+          hasn't expired. It won't appear for the admin who sends it. Users who enabled alerts can
+          also receive a heads-up notification on their phone or browser.
         </p>
         <div className="mt-3 space-y-2">
           <Label htmlFor="next-open-announcement-title">Title</Label>
