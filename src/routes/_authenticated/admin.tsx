@@ -117,6 +117,7 @@ function AdminPage() {
   const [nextOpenBusy, setNextOpenBusy] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollChoices, setPollChoices] = useState(["", "", "", ""]);
+  const [pollLegacyCounts, setPollLegacyCounts] = useState(["0", "0", "0", "0"]);
   const [pollImage, setPollImage] = useState<File | null>(null);
   const [pollImagePreview, setPollImagePreview] = useState<string | null>(null);
   const pollImageInput = useRef<HTMLInputElement>(null);
@@ -433,13 +434,33 @@ function AdminPage() {
   const createPoll = async () => {
     if (!user) return;
     const question = sanitizeText(pollQuestion, 200);
-    const choices = pollChoices.map((c) => sanitizeText(c, 80)).filter(Boolean);
+    const choices = pollChoices
+      .map((choice, index) => ({
+        label: sanitizeText(choice, 80),
+        legacyCount: pollLegacyCounts[index]?.trim() || "0",
+      }))
+      .filter((choice) => choice.label);
     if (!question) {
       toast.error("Type the poll question");
       return;
     }
     if (choices.length < 2) {
       toast.error("Add at least two choices");
+      return;
+    }
+    const parsedChoices = choices.map((choice) => ({
+      label: choice.label,
+      legacyCount: Number(choice.legacyCount),
+    }));
+    if (
+      parsedChoices.some(
+        (choice) =>
+          !Number.isInteger(choice.legacyCount) ||
+          choice.legacyCount < 0 ||
+          choice.legacyCount > 2_000_000_000,
+      )
+    ) {
+      toast.error("Legacy vote counts must be whole numbers from 0 to 2 billion");
       return;
     }
     setPollBusy(true);
@@ -456,15 +477,21 @@ function AdminPage() {
         toast.error(error?.message ?? "Could not create the poll");
         return;
       }
-      const { error: optError } = await supabase
-        .from("poll_options")
-        .insert(choices.map((label, i) => ({ poll_id: data.id, label, position: i })));
+      const { error: optError } = await supabase.from("poll_options").insert(
+        parsedChoices.map(({ label, legacyCount }, i) => ({
+          poll_id: data.id,
+          label,
+          position: i,
+          legacy_vote_count: legacyCount,
+        })),
+      );
       if (optError) {
         toast.error(optError.message);
         return;
       }
       setPollQuestion("");
       setPollChoices(["", "", "", ""]);
+      setPollLegacyCounts(["0", "0", "0", "0"]);
       setPollImage(null);
       if (pollImageInput.current) pollImageInput.current.value = "";
       toast.success("Poll published to the feed");
@@ -745,19 +772,40 @@ function AdminPage() {
         />
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {pollChoices.map((choice, i) => (
-            <Input
-              key={i}
-              value={choice}
-              onChange={(e) =>
-                setPollChoices((list) => list.map((c, idx) => (idx === i ? e.target.value : c)))
-              }
-              maxLength={80}
-              placeholder={`Choice ${i + 1}${i > 1 ? " (optional)" : ""}`}
-              aria-label={`Poll choice ${i + 1}`}
-              className="min-h-11"
-            />
+            <div key={i} className="space-y-1">
+              <Input
+                value={choice}
+                onChange={(e) =>
+                  setPollChoices((list) => list.map((c, idx) => (idx === i ? e.target.value : c)))
+                }
+                maxLength={80}
+                placeholder={`Choice ${i + 1}${i > 1 ? " (optional)" : ""}`}
+                aria-label={`Poll choice ${i + 1}`}
+                className="min-h-11"
+              />
+              <Input
+                type="number"
+                min={0}
+                max={2_000_000_000}
+                step={1}
+                value={pollLegacyCounts[i]}
+                onChange={(e) =>
+                  setPollLegacyCounts((list) =>
+                    list.map((count, idx) => (idx === i ? e.target.value : count)),
+                  )
+                }
+                placeholder="0"
+                aria-label={`Legacy vote import count for choice ${i + 1}`}
+                className="min-h-10 text-sm"
+              />
+              <p className="text-xs text-muted-foreground">Legacy votes to add</p>
+            </div>
           ))}
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Imported votes are added to the displayed tally only. They do not create student accounts
+          or individual vote records.
+        </p>
         <div className="mt-3 space-y-2">
           <Label htmlFor="poll-image">Poll image (optional)</Label>
           <div className="flex items-center gap-2">
