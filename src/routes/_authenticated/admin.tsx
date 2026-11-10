@@ -68,6 +68,22 @@ interface ReportRow {
   created_at: string;
 }
 
+interface ManagedPollOption {
+  id: string;
+  poll_id: string;
+  label: string;
+  position: number;
+  legacy_vote_count: number;
+}
+
+interface ManagedPoll {
+  id: string;
+  question: string;
+  is_active: boolean;
+  created_at: string;
+  options: ManagedPollOption[];
+}
+
 async function cleanupUnattachedUpload(path: string | null) {
   if (!path) return;
   try {
@@ -122,6 +138,9 @@ function AdminPage() {
   const [pollImagePreview, setPollImagePreview] = useState<string | null>(null);
   const pollImageInput = useRef<HTMLInputElement>(null);
   const [pollBusy, setPollBusy] = useState(false);
+  const [managedPolls, setManagedPolls] = useState<ManagedPoll[]>([]);
+  const [managedPollsLoading, setManagedPollsLoading] = useState(false);
+  const [savingPollTallyId, setSavingPollTallyId] = useState<string | null>(null);
   const [userQuery, setUserQuery] = useState("");
   const [found, setFound] = useState<
     (MiniProfile & { is_banned: boolean; post_block_until: string | null })[]
@@ -147,6 +166,96 @@ function AdminPage() {
     setNextOpenImagePreview(preview);
     return () => URL.revokeObjectURL(preview);
   }, [nextOpenImage]);
+
+  const loadManagedPolls = useCallback(async () => {
+    setManagedPollsLoading(true);
+    const { data: polls, error: pollsError } = await supabase
+      .from("polls")
+      .select("id, question, is_active, created_at")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (pollsError) {
+      setManagedPollsLoading(false);
+      toast.error(`Could not load existing polls: ${pollsError.message}`);
+      return;
+    }
+    const pollRows = (polls ?? []) as Omit<ManagedPoll, "options">[];
+    if (pollRows.length === 0) {
+      setManagedPolls([]);
+      setManagedPollsLoading(false);
+      return;
+    }
+    const { data: options, error: optionsError } = await supabase
+      .from("poll_options")
+      .select("id, poll_id, label, position, legacy_vote_count")
+      .in(
+        "poll_id",
+        pollRows.map((poll) => poll.id),
+      )
+      .order("position", { ascending: true });
+    if (optionsError) {
+      setManagedPollsLoading(false);
+      toast.error(`Could not load poll options: ${optionsError.message}`);
+      return;
+    }
+    const optionsByPoll: Record<string, ManagedPollOption[]> = {};
+    for (const option of (options ?? []) as ManagedPollOption[]) {
+      (optionsByPoll[option.poll_id] ??= []).push(option);
+    }
+    setManagedPolls(pollRows.map((poll) => ({ ...poll, options: optionsByPoll[poll.id] ?? [] })));
+    setManagedPollsLoading(false);
+  }, []);
+
+  const savePollTally = async (poll: ManagedPoll) => {
+    const updates = poll.options.map((option) => ({
+      id: option.id,
+      legacy_vote_count: Number(option.legacy_vote_count),
+    }));
+    if (
+      updates.some(
+        (option) =>
+          !Number.isInteger(option.legacy_vote_count) ||
+          option.legacy_vote_count < 0 ||
+          option.legacy_vote_count > 2_000_000_000,
+      )
+    ) {
+      toast.error("Legacy vote counts must be whole numbers from 0 to 2 billion");
+      return;
+    }
+    setSavingPollTallyId(poll.id);
+    try {
+      const results = await Promise.all(
+        updates.map((option) =>
+          supabase
+            .from("poll_options")
+            .update({ legacy_vote_count: option.legacy_vote_count })
+            .eq("id", option.id),
+        ),
+      );
+      const failed = results.find((result) => result.error);
+      if (failed?.error) throw failed.error;
+      setManagedPolls((current) =>
+        current.map((currentPoll) =>
+          currentPoll.id === poll.id
+            ? {
+                ...currentPoll,
+                options: currentPoll.options.map((option) => ({
+                  ...option,
+                  legacy_vote_count:
+                    updates.find((update) => update.id === option.id)?.legacy_vote_count ??
+                    option.legacy_vote_count,
+                })),
+              }
+            : currentPoll,
+        ),
+      );
+      toast.success("Historical poll totals updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update poll totals");
+    } finally {
+      setSavingPollTallyId(null);
+    }
+  };
 
   const load = useCallback(async () => {
     const [p, a, r, students, posts, matches] = await Promise.all([
@@ -198,8 +307,11 @@ function AdminPage() {
   }, [user]);
 
   useEffect(() => {
-    if (isAdmin) void load();
-  }, [isAdmin, load]);
+    if (isAdmin) {
+      void load();
+      void loadManagedPolls();
+    }
+  }, [isAdmin, load, loadManagedPolls]);
 
   if (!isAdmin) {
     return (
@@ -864,6 +976,99 @@ function AdminPage() {
         <Button className="mt-3 min-h-11" disabled={pollBusy} onClick={() => void createPoll()}>
           {pollBusy ? "Publishing…" : "Publish poll"}
         </Button>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-base font-semibold">Manage existing poll tallies</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add or correct offline-survey totals for polls already running in MKU Pulse. Live app
+              votes continue separately and are added to these imported totals.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-10"
+            disabled={managedPollsLoading}
+            onClick={() => void loadManagedPolls()}
+          >
+            {managedPollsLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            Refresh polls
+          </Button>
+        </div>
+        {managedPollsLoading && managedPolls.length === 0 ? (
+          <p className="mt-4 text-sm text-muted-foreground">Loading existing polls…</p>
+        ) : managedPolls.length === 0 ? (
+          <p className="mt-4 text-sm text-muted-foreground">No polls have been created yet.</p>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {managedPolls.map((poll) => (
+              <div key={poll.id} className="rounded-xl border border-border p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-semibold">{poll.question}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {poll.is_active ? "Running" : "Closed"} · created {timeAgo(poll.created_at)}
+                    </p>
+                  </div>
+                  <Badge variant={poll.is_active ? "secondary" : "outline"}>
+                    {poll.is_active ? "Live" : "Closed"}
+                  </Badge>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {poll.options.map((option) => (
+                    <div
+                      key={option.id}
+                      className="flex items-center gap-3 rounded-lg bg-muted/40 p-2"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm">{option.label}</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={2_000_000_000}
+                        step={1}
+                        value={option.legacy_vote_count}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          setManagedPolls((current) =>
+                            current.map((currentPoll) =>
+                              currentPoll.id === poll.id
+                                ? {
+                                    ...currentPoll,
+                                    options: currentPoll.options.map((currentOption) =>
+                                      currentOption.id === option.id
+                                        ? { ...currentOption, legacy_vote_count: value }
+                                        : currentOption,
+                                    ),
+                                  }
+                                : currentPoll,
+                            ),
+                          );
+                        }}
+                        aria-label={`Legacy vote import count for ${option.label}`}
+                        className="min-h-10 w-32"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  className="mt-3 min-h-10"
+                  disabled={savingPollTallyId === poll.id}
+                  onClick={() => void savePollTally(poll)}
+                >
+                  {savingPollTallyId === poll.id ? "Saving…" : "Save imported totals"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="mt-3 text-xs text-muted-foreground">
+          Updating this field never creates or changes individual student votes. Totals may take up
+          to one minute to refresh for users who already have the poll open.
+        </p>
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-5">
